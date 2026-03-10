@@ -27,6 +27,7 @@ interface TodayStats {
     byType: Record<string, number>;
     hourly: number[]; // length 24
     auto_closed?: number;
+    in_game_submitted?: number;
 }
 
 export default function TodayTicketsModal({
@@ -61,6 +62,7 @@ export default function TodayTicketsModal({
                     byType: resp.byType || {},
                     hourly: resp.hourly || [],
                     auto_closed: resp.auto_closed || 0,
+                    in_game_submitted: resp.in_game_submitted || 0,
                 });
             },
         }).finally(() => setLoading(false));
@@ -117,8 +119,8 @@ export default function TodayTicketsModal({
 
                     {!loading && data && (
                         <>
-                            <Row gutter={16}>
-                                <Col span={12}>
+                            <Row gutter={[16, 16]}>
+                                <Col xs={24} sm={12} md={8}>
                                     <Card
                                         bordered={false}
                                         bodyStyle={{
@@ -136,7 +138,7 @@ export default function TodayTicketsModal({
                                         />
                                     </Card>
                                 </Col>
-                                <Col span={12}>
+                                <Col xs={24} sm={12} md={8}>
                                     <Card
                                         bordered={false}
                                         bodyStyle={{
@@ -150,6 +152,24 @@ export default function TodayTicketsModal({
                                                 count: '',
                                             }).replace('：', '')}
                                             value={data.auto_closed ?? 0}
+                                            valueStyle={{ fontSize: 20 }}
+                                        />
+                                    </Card>
+                                </Col>
+                                <Col xs={24} sm={12} md={8}>
+                                    <Card
+                                        bordered={false}
+                                        bodyStyle={{
+                                            padding: 12,
+                                            background: token.colorFillAlter,
+                                            borderRadius: token.borderRadiusLG,
+                                        }}
+                                    >
+                                        <Statistic
+                                            title={gLang('adminMain.todayStatsInGameSubmitted', {
+                                                count: '',
+                                            }).replace('：', '')}
+                                            value={data.in_game_submitted ?? 0}
                                             valueStyle={{ fontSize: 20 }}
                                         />
                                     </Card>

@@ -1168,6 +1168,7 @@ export const adminLanguageConfig = {
             todayStatsTypesTitle: '按类型分布',
             todayStatsTimeTitle: '按发起时间分布',
             todayStatsAutoClosed: '自动关闭：{count}',
+            todayStatsInGameSubmitted: '今日服内发送：{count}',
             todayStatsViewDetails: '查看详情',
             todayStatsCollapseDetails: '收起详情',
             jwt: {

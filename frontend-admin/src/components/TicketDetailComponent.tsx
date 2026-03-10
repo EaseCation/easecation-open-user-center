@@ -646,6 +646,12 @@ const TicketDetailComponent: React.FC<{
                                                                         }}
                                                                     >
                                                                         {detail.displayTitle}
+                                                                        {detail.operator.startsWith(
+                                                                            'EC-'
+                                                                        ) &&
+                                                                            gLang(
+                                                                                'ticketDetail.inGameLabel'
+                                                                            )}
                                                                     </span>
                                                                 </Popover>
                                                             ) : (
@@ -663,6 +669,12 @@ const TicketDetailComponent: React.FC<{
                                                                         }}
                                                                     >
                                                                         {detail.displayTitle}
+                                                                        {detail.operator.startsWith(
+                                                                            'EC-'
+                                                                        ) &&
+                                                                            gLang(
+                                                                                'ticketDetail.inGameLabel'
+                                                                            )}
                                                                     </span>
                                                                 </Tooltip>
                                                             )
@@ -680,6 +692,12 @@ const TicketDetailComponent: React.FC<{
                                                                 }}
                                                             >
                                                                 {detail.displayTitle}
+                                                                {detail.operator.startsWith(
+                                                                    'EC-'
+                                                                ) &&
+                                                                    gLang(
+                                                                        'ticketDetail.inGameLabel'
+                                                                    )}
                                                             </span>
                                                         )}
                                                         {detail.action ===

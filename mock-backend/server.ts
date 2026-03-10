@@ -1414,7 +1414,15 @@ app.post('/ticket/listByOpenIdAndType', (req, res) => {
 });
 
 app.get('/ticket/today-stats', (_req, res) => {
-    res.json(ok({ created: 12, closed: 9, pending: 3 }));
+    res.json(
+        ok({
+            total: 12,
+            byType: { AG: 5, RP: 3, SP: 2, MM: 2 },
+            hourly: Array.from({ length: 24 }, (_, index) => (index % 5 === 0 ? 1 : 0)),
+            auto_closed: 2,
+            in_game_submitted: 7,
+        })
+    );
 });
 
 app.get('/ticket/today-stats/hour', (_req, res) => {

@@ -899,6 +899,7 @@ export const languageConfig: Readonly<LanguageConfig> = {
         revokedMessage: '撤回消息',
         internalNote: '内部备注',
         noteLabel: '备注',
+        inGameLabel: '（服内）',
         editNote: '编辑',
         convertToReply: '转为用户可见',
         editNoteSuccess: '内部注释已更新',
