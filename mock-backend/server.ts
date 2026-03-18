@@ -1593,7 +1593,7 @@ const shopProducts = [
     {
         id: 102,
         title: '外观：星辰斗篷',
-        json: '[{"category":"ornament.back","idItem":"star_cape","data":1}]',
+        json: '[{"category":"ornament","idItem":"star_cape","data":1}]',
         price: 88,
         detail: '限定外观，支持商城演示。',
         total_limit: 50,
