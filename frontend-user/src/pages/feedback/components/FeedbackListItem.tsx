@@ -8,6 +8,7 @@ import { useTheme } from '@common/contexts/ThemeContext';
 import { ltransFeedbackStatusBarColor } from '@common/languageTrans';
 import { formatSmartTime } from '@common/components/TimeConverter';
 import { gLang } from '@common/language';
+import FeedbackTagGroup from '@common/components/Feedback/FeedbackTagGroup';
 
 const { Text } = Typography;
 
@@ -75,7 +76,7 @@ const FeedbackListItem: React.FC<FeedbackListItemProps> = ({ ticket, to }) => {
                             <Text strong style={{ fontSize: 16, lineHeight: 1.5 }}>
                                 {title}
                             </Text>
-                            {ticket.tag ? <Tag color="blue">{ticket.tag}</Tag> : null}
+                            <FeedbackTagGroup publicTags={ticket.publicTags} />
                             {ticket.feedbackType === 'BUG' ? (
                                 <Tag color="red">{gLang('feedback.typeBug')}</Tag>
                             ) : ticket.feedbackType === 'SUGGESTION' ? (

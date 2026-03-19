@@ -6,7 +6,7 @@ import { fetchData, submitData } from '@common/axiosConfig';
 import { useParams } from 'react-router-dom';
 import { gLang } from '@common/language';
 import Wrapper from '@common/components/Wrapper/Wrapper';
-import { Ticket, TicketStatus, TicketDetail } from '@ecuc/shared/types/ticket.types';
+import { Feedback, TicketStatus, TicketDetail } from '@ecuc/shared/types/ticket.types';
 import usePageTitle from '@common/hooks/usePageTitle';
 import { useTheme } from '@common/contexts/ThemeContext';
 import FeedbackContent from '@common/components/Feedback/FeedbackContent';
@@ -45,7 +45,7 @@ const FeedbackDetail: React.FC = () => {
     const { tid } = useParams();
     const screens = useBreakpoint();
     const isMobile = !screens.md;
-    const [ticket, setTicket] = useState<Ticket | undefined>();
+    const [ticket, setTicket] = useState<Feedback | undefined>();
     const [isSpinning, setIsSpinning] = useState(true);
     const [isFormDisabled, setIsFormDisabled] = useState(false);
     const [filterType, setFilterType] = useState<'all' | 'official'>('all');

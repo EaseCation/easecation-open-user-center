@@ -10,12 +10,13 @@ import Switch from 'antd/es/switch';
 import Popover from 'antd/es/popover';
 import { BellOutlined, BellFilled, MoreOutlined } from '@ant-design/icons';
 import { gLang } from '@common/language';
-import { Feedback, TicketDetail, Ticket } from '@ecuc/shared/types/ticket.types';
+import { Feedback, FeedbackTagSummary, TicketDetail, Ticket } from '@ecuc/shared/types/ticket.types';
 import { useTheme } from '@common/contexts/ThemeContext';
 import { ltransTicketStatusColor, ltransTicketStatusForUser } from '@common/languageTrans';
 import { formatSmartTime } from '@common/components/TimeConverter';
 import ReplyCard from './ReplyCard';
 import FeedbackReplyRoute from './FeedbackReplyRoute';
+import FeedbackTagGroup, { ProgressTag } from './FeedbackTagGroup';
 
 const { Text } = Typography;
 
@@ -43,6 +44,12 @@ interface FeedbackContentProps {
     isUpdatingSubscription: boolean;
     /** (openid, checked) 切换指定 openid 的订阅状态 */
     onSubscriptionChange: (openid: string, checked: boolean) => void;
+    /** 管理端专用：渲染在筛选 Segmented 旁边的额外控件（如视图切换） */
+    adminFilterSlot?: React.ReactNode;
+    /** 管理端专用：当提供时，替换回复列表区域（同时隐藏筛选 Segmented） */
+    adminNotesOverride?: React.ReactNode;
+    /** 使用 contentHtml（管理端 URL）代替 contentHtmlUser */
+    useAdminHtml?: boolean;
 }
 
 const FeedbackContent: React.FC<FeedbackContentProps> = ({
@@ -64,9 +71,21 @@ const FeedbackContent: React.FC<FeedbackContentProps> = ({
     primaryOpenid,
     isUpdatingSubscription,
     onSubscriptionChange,
+    adminFilterSlot,
+    adminNotesOverride,
+    useAdminHtml,
 }) => {
     useTheme();
     const [boundAccountsOpen, setBoundAccountsOpen] = useState(false);
+    const getFadeInStyle = (): React.CSSProperties | undefined => {
+        if (animationDelay <= 0) {
+            return undefined;
+        }
+        return {
+            opacity: 0,
+            animation: `fadeInUp 0.5s ease-in-out ${cardIndex.current++ * animationDelay}s forwards`,
+        };
+    };
 
     const otherOpenids = useMemo(() => {
         if (!subscribed || primaryOpenid == null) return [];
@@ -83,6 +102,8 @@ const FeedbackContent: React.FC<FeedbackContentProps> = ({
         () => otherOpenids.filter(oid => subscribed?.[oid] === true),
         [otherOpenids, subscribed]
     );
+
+    const progressTag: FeedbackTagSummary | null = (ticket as any).progressTag ?? null;
 
     // 处理主帖和回复数据
     const { mainPost, replies, detailIdToFloor } = useMemo((): {
@@ -129,10 +150,7 @@ const FeedbackContent: React.FC<FeedbackContentProps> = ({
             <Space orientation="vertical" style={{ width: '100%' }} size={8}>
                 {/* 帖子标题和元信息 */}
                 <div
-                    style={{
-                        opacity: 0,
-                        animation: `fadeInUp 0.5s ease-in-out ${cardIndex.current++ * animationDelay}s forwards`,
-                    }}
+                    style={getFadeInStyle()}
                 >
                     <Card style={{ borderRadius: 8 }} bodyStyle={{ padding: '16px' }}>
                         <Space orientation="vertical" style={{ width: '100%' }} size={8}>
@@ -178,6 +196,7 @@ const FeedbackContent: React.FC<FeedbackContentProps> = ({
                                     )}
                                 </Space>
                             </div>
+                            {progressTag && <ProgressTag tag={progressTag} />}
                             <div
                                 style={{
                                     display: 'flex',
@@ -194,7 +213,7 @@ const FeedbackContent: React.FC<FeedbackContentProps> = ({
                                             ticket.type
                                         )}
                                     </Tag>
-                                    {ticket.tag ? <Tag color="blue">{ticket.tag}</Tag> : null}
+                                    <FeedbackTagGroup publicTags={ticket.publicTags} />
                                     {ticket.feedbackType === 'BUG' ? (
                                         <Tag color="red">{gLang('feedback.typeBug')}</Tag>
                                     ) : ticket.feedbackType === 'SUGGESTION' ? (
@@ -304,67 +323,75 @@ const FeedbackContent: React.FC<FeedbackContentProps> = ({
                                     onSetFeatured={onSetFeatured}
                                     onEditDetail={onEditDetail}
                                     marginBottom={0}
+                                    useAdminHtml={useAdminHtml}
                                 />
                             )}
                         </Space>
 
                         {/* 筛选选项 */}
                         {mainPost && (
-                            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                                <Space>
-                                    <Segmented
-                                        value={filterType}
-                                        onChange={value =>
-                                            onFilterChange(value as 'all' | 'official')
-                                        }
-                                        options={[
-                                            {
-                                                label: `${gLang('feedback.allReplies')} (${replies.length})`,
-                                                value: 'all',
-                                            },
-                                            {
-                                                label: `${gLang('feedback.showOfficialOnly')} (${replies.length > 0 ? replies.filter(reply => reply.isOfficial).length : mainPost?.isOfficial ? 1 : 0})`,
-                                                value: 'official',
-                                            },
-                                        ]}
-                                        style={{ marginRight: 8 }}
-                                    />
+                            <Space
+                                style={{
+                                    width: '100%',
+                                    justifyContent: 'space-between',
+                                    marginTop:
+                                        mainPost.attachments && mainPost.attachments.length > 0
+                                            ? 16
+                                            : 0,
+                                }}
+                            >
+                                <Space wrap size={6}>
+                                    {!adminNotesOverride && (
+                                        <Segmented
+                                            value={filterType}
+                                            onChange={value =>
+                                                onFilterChange(value as 'all' | 'official')
+                                            }
+                                            options={[
+                                                {
+                                                    label: `${gLang('feedback.allReplies')} (${replies.length})`,
+                                                    value: 'all',
+                                                },
+                                                {
+                                                    label: `${gLang('feedback.showOfficialOnly')} (${replies.length > 0 ? replies.filter(reply => reply.isOfficial).length : mainPost?.isOfficial ? 1 : 0})`,
+                                                    value: 'official',
+                                                },
+                                            ]}
+                                        />
+                                    )}
+                                    {adminFilterSlot}
                                 </Space>
                             </Space>
                         )}
                     </Card>
                 </div>
 
+                {/* 管理端：内部备注覆盖视图 */}
+                {adminNotesOverride != null && adminNotesOverride}
+
                 {/* 回复列表 */}
-                {filteredReplies.length > 0 ? (
-                    <div
-                        style={{
-                            opacity: 0,
-                            animation: `fadeInUp 0.5s ease-in-out ${cardIndex.current++ * animationDelay}s forwards`,
-                        }}
-                    >
-                        <ReplyCard
-                            details={filteredReplies}
-                            startFloorNumber={2}
-                            detailIdToFloor={detailIdToFloor}
-                            canReply={canReply}
-                            onReplyTo={onReplyTo}
-                            onSetFeatured={onSetFeatured}
-                            onEditDetail={onEditDetail}
-                        />
-                    </div>
-                ) : replies.length > 0 ? (
-                    <div
-                        style={{
-                            opacity: 0,
-                            animation: `fadeInUp 0.5s ease-in-out ${cardIndex.current++ * animationDelay}s forwards`,
-                        }}
-                    >
-                        <Card style={{ textAlign: 'center', borderRadius: 8 }}>
-                            <Text type="secondary">{gLang('feedback.noMatchingReplies')}</Text>
-                        </Card>
-                    </div>
-                ) : null}
+                {adminNotesOverride == null && (
+                    filteredReplies.length > 0 ? (
+                        <div style={getFadeInStyle()}>
+                            <ReplyCard
+                                details={filteredReplies}
+                                startFloorNumber={2}
+                                detailIdToFloor={detailIdToFloor}
+                                canReply={canReply}
+                                onReplyTo={onReplyTo}
+                                onSetFeatured={onSetFeatured}
+                                onEditDetail={onEditDetail}
+                                useAdminHtml={useAdminHtml}
+                            />
+                        </div>
+                    ) : replies.length > 0 ? (
+                        <div style={getFadeInStyle()}>
+                            <Card style={{ textAlign: 'center', borderRadius: 8 }}>
+                                <Text type="secondary">{gLang('feedback.noMatchingReplies')}</Text>
+                            </Card>
+                        </div>
+                    ) : null
+                )}
 
                 {/* 回复表单 - 使用路由分发组件，根据设备类型选择合适的回复框 */}
                 {/* 管理端不显示回复框，参考设为精华工具的实现 */}

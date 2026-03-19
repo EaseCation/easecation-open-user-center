@@ -30,20 +30,24 @@ const TicketListPanel: React.FC<TicketListPanelProps> = ({
     const [detailLoading, setDetailLoading] = useState(false);
 
     const handleTicketClick = async (tid: number) => {
-        setPreviewTid(tid);
-        setDetailLoading(true);
-        // 清除之前的数据，避免显示错误的工单信息
-        setSelectedTicket(undefined);
-        // 如果有外部传入的点击处理函数，也调用它
-        onTicketClick?.(tid);
-        // 获取工单详情
-        await fetchData({
-            url: '/ticket/detail',
-            method: 'GET',
-            data: { tid },
-            setData: setSelectedTicket,
-            setSpin: setDetailLoading,
-        });
+        // 如果有外部传入的点击处理函数，只调用它，不自己打开模态框
+        if (onTicketClick) {
+            onTicketClick(tid);
+        } else {
+            // 没有外部点击处理函数时，使用内部模态框
+            setPreviewTid(tid);
+            setDetailLoading(true);
+            // 清除之前的数据，避免显示错误的工单信息
+            setSelectedTicket(undefined);
+            // 获取工单详情
+            await fetchData({
+                url: '/ticket/detail',
+                method: 'GET',
+                data: { tid },
+                setData: setSelectedTicket,
+                setSpin: setDetailLoading,
+            });
+        }
     };
 
     const handleModalClose = () => {
@@ -72,7 +76,6 @@ const TicketListPanel: React.FC<TicketListPanelProps> = ({
                             <Spin spinning={loading}>
                                 <TicketListComponent
                                     tickets={tickets}
-                                    to={() => ''}
                                     loading={loading}
                                     onTicketClick={handleTicketClick}
                                     style={{}}

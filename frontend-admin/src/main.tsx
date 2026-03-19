@@ -39,7 +39,10 @@ import TicketAutoEntrustAgent from './pages/admin/ai-center/agents/TicketAutoEnt
 import ChannelLimitAgent from './pages/admin/ai-center/agents/ChannelLimitAgent';
 import AutoProcessRules from './pages/admin/ai-center/AutoProcessRules';
 const FeedbackManageRoute = lazy(() => import('./pages/admin/feedback/FeedbackManageRoute'));
+const FeedbackTagLibraryPage = lazy(() => import('./pages/admin/feedback/FeedbackTagLibraryPage'));
+const FeedbackTablePage = lazy(() => import('./pages/admin/feedback/FeedbackTablePage'));
 import TlgiftMall from './pages/admin/tlgift/TlgiftMall';
+import JiraIssueDetail from './pages/admin/jira/JiraIssueDetail';
 
 // 重定向组件：将 operate/:type 重定向到 assign/:type（backToMy 跳转到工单列表）
 const RedirectOperateToAssign = ({ basePath }: { basePath: string }) => {
@@ -315,6 +318,15 @@ ReactDOM.createRoot(rootElement).render(
                                                     </AdminRouteGuard>
                                                 }
                                             />
+                                            {/* Jira 工单详情（通过 Kanban 中继） */}
+                                            <Route
+                                                path="jira/issues/:issueKey"
+                                                element={
+                                                    <AdminRouteGuard requiredPermission="authorize.normal">
+                                                        <JiraIssueDetail />
+                                                    </AdminRouteGuard>
+                                                }
+                                            />
                                             {/* 高风险操作审批 */}
                                             <Route
                                                 path="risk-approval"
@@ -332,12 +344,36 @@ ReactDOM.createRoot(rootElement).render(
                                                     </AdminRouteGuard>
                                                 }
                                             />
-                                            {/* 反馈管理 - PC分栏布局，右侧复用 /ticket/operate 路由体系 */}
+                                            {/* 反馈管理 - PC分栏布局，右侧复用 /ticket/operate 路由体系，登录即可访问 */}
                                             <Route
                                                 path="feedback"
                                                 element={
-                                                    <AdminRouteGuard requiredPermission="authorize.normal">
+                                                    <AdminRouteGuard>
                                                         <FeedbackManageRoute />
+                                                    </AdminRouteGuard>
+                                                }
+                                            />
+                                            <Route
+                                                path="feedback/tags"
+                                                element={
+                                                    <AdminRouteGuard>
+                                                        <FeedbackTagLibraryPage />
+                                                    </AdminRouteGuard>
+                                                }
+                                            />
+                                            <Route
+                                                path="feedback/table"
+                                                element={
+                                                    <AdminRouteGuard>
+                                                        <FeedbackTablePage />
+                                                    </AdminRouteGuard>
+                                                }
+                                            />
+                                            <Route
+                                                path="feedback/table/:tid"
+                                                element={
+                                                    <AdminRouteGuard>
+                                                        <FeedbackTablePage />
                                                     </AdminRouteGuard>
                                                 }
                                             />

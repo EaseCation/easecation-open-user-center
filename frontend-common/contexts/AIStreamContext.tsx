@@ -10,6 +10,20 @@ import React, {
 import { callAIStreamWithCancel } from '../utils/aiStream';
 import { AIStreamState, AIStreamChunk } from '@ecuc/shared/types/ai.types';
 
+const normalizeStepContent = (value: unknown): string => {
+    if (typeof value === 'string') {
+        return value;
+    }
+    if (value === undefined || value === null) {
+        return '';
+    }
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return String(value);
+    }
+};
+
 interface AIStreamContextType extends AIStreamState {
     startStream: (tid: number, prompt?: string) => Promise<void>;
     cancelStream: () => void;
@@ -92,6 +106,11 @@ export const AIStreamProvider: React.FC<AIStreamProviderProps> = ({ children }) 
                     switch (message.type) {
                         case 'thinking_step':
                             if (message.step) {
+                                // 确保 thinkingSteps 是数组
+                                if (!Array.isArray(newState.thinkingSteps)) {
+                                    newState.thinkingSteps = [];
+                                }
+                                
                                 // 添加或更新思维步骤，使用更智能的匹配策略
                                 const existingIndex = newState.thinkingSteps.findIndex(
                                     step =>
@@ -103,20 +122,19 @@ export const AIStreamProvider: React.FC<AIStreamProviderProps> = ({ children }) 
                                     // 更新现有步骤，保持引用以便React检测变化
                                     newState.thinkingSteps = [...newState.thinkingSteps];
                                     const existingStep = newState.thinkingSteps[existingIndex];
-                                    const newContent = message.step.content;
+                                    const newContent = normalizeStepContent(message.step.content);
+                                    const existingContent = normalizeStepContent(existingStep.content);
 
                                     // 如果新内容非空且与现有内容不同，则累积内容
-                                    let updatedContent = existingStep.content;
-                                    if (newContent && newContent !== existingStep.content) {
+                                    let updatedContent = existingContent;
+                                    if (newContent && newContent !== existingContent) {
                                         // 如果现有内容为空，直接使用新内容
-                                        if (!existingStep.content) {
+                                        if (!existingContent) {
                                             updatedContent = newContent;
                                         } else {
                                             // 尝试合并JSON对象
                                             try {
-                                                const existingObj = JSON.parse(
-                                                    existingStep.content
-                                                );
+                                                const existingObj = JSON.parse(existingContent);
 
                                                 // 检查新内容是否为JSON
                                                 let isNewContentJSON = false;
@@ -232,9 +250,8 @@ export const AIStreamProvider: React.FC<AIStreamProviderProps> = ({ children }) 
                                                 }
                                             } catch {
                                                 // 现有内容不是JSON格式，使用原来的字符串累积逻辑
-                                                if (!existingStep.content.includes(newContent)) {
-                                                    updatedContent =
-                                                        existingStep.content + newContent;
+                                                    if (!existingContent.includes(newContent)) {
+                                                        updatedContent = existingContent + newContent;
                                                 }
                                             }
                                         }
@@ -247,9 +264,13 @@ export const AIStreamProvider: React.FC<AIStreamProviderProps> = ({ children }) 
                                     };
                                 } else {
                                     // 添加新步骤
+                                    const normalizedStep = {
+                                        ...message.step,
+                                        content: normalizeStepContent(message.step.content),
+                                    };
                                     newState.thinkingSteps = [
                                         ...newState.thinkingSteps,
-                                        message.step,
+                                        normalizedStep,
                                     ];
                                 }
 

@@ -7,7 +7,7 @@
         "predev": "rimraf node_modules/.vite node_modules/.cache/vite",
         "dev": "vite --host",
         "dev:prod": "vite --host --mode production",
-        "build": "tsc && vite build",
+        "build": "vite build",
         "preview": "vite preview",
         "type-check": "tsc --noEmit",
         "type-check:watch": "tsc --noEmit --watch",

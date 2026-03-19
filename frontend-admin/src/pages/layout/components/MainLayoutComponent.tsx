@@ -33,6 +33,7 @@ const MainLayoutComponent = ({ breadcrumbItems, onLogout }: Props) => {
     const { user } = useAuth();
     const isLoginPage = location.pathname === '/login' || location.pathname.startsWith('/login/');
     const isShopAdminRoute = location.pathname.startsWith('/media/shop');
+    const isFeedbackTableRoute = location.pathname.startsWith('/feedback/table');
     const [themeModalOpen, setThemeModalOpen] = React.useState(false);
 
     // 在组件加载时检查是否有用户端传来的路径参数
@@ -119,7 +120,13 @@ const MainLayoutComponent = ({ breadcrumbItems, onLogout }: Props) => {
 
     // Check if user has authorize.normal permission to show sidebar
     const hasAdminPermission = user?.permission?.includes('authorize.normal');
-    const shouldShowSidebar = isAdminRoute && isPC && hasAdminPermission;
+    // For feedback center, allow sidebar for any logged-in user (no authorize.normal required)
+    const shouldShowSidebar =
+        !isFeedbackTableRoute &&
+        isAdminRoute &&
+        isPC &&
+        !!user &&
+        (hasAdminPermission || isFeedbackSidebarActive);
 
     const { getThemeColor } = useTheme();
     const palette = CUSTOM_THEME_PALETTES.blackOrange;

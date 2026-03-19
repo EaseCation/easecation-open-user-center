@@ -17,6 +17,16 @@ const toInt = (value, fallback = 0) => {
     const parsed = Number.parseInt(String(value), 10);
     return Number.isFinite(parsed) ? parsed : fallback;
 };
+const parseIntArray = value => {
+    const values = Array.isArray(value) ? value : value == null ? [] : [value];
+    return Array.from(
+        new Set(
+            values
+                .map(item => Number.parseInt(String(item), 10))
+                .filter(item => Number.isFinite(item) && item > 0)
+        )
+    );
+};
 
 const ok = (extra = {}) => ({
     EPF_code: 200,
@@ -38,6 +48,9 @@ const parseJsonSafely = (text, fallback = null) => {
         return fallback;
     }
 };
+
+const normalizeMockTagName = value => String(value || '').trim();
+const normalizeMockTagKey = value => normalizeMockTagName(value).toLowerCase();
 
 const app = express();
 
@@ -132,7 +145,20 @@ const initialFeedback = {
     status: 'O',
     create_time: nowText(),
     advisor_uid: '10086',
-    tag: '建议',
+    publicTags: [
+        {
+            id: 1,
+            name: '建议',
+            scope: 'PUBLIC',
+        },
+    ],
+    internalTags: [
+        {
+            id: 2,
+            name: '首页优化',
+            scope: 'INTERNAL',
+        },
+    ],
     feedbackType: 'SUGGESTION',
     lastReplyTime: nowText(),
     replyCount: 2,
@@ -285,6 +311,26 @@ const state = {
         openid: MOCK_USER.openid,
         wechatOpenIdPrefix: 'oWac56',
     },
+    feedbackTags: [
+        {
+            id: 1,
+            name: '建议',
+            scope: 'PUBLIC',
+            status: 'ACTIVE',
+            aliasOfTagId: null,
+            create_time: nowIso(),
+            update_time: nowIso(),
+        },
+        {
+            id: 2,
+            name: '首页优化',
+            scope: 'INTERNAL',
+            status: 'ACTIVE',
+            aliasOfTagId: null,
+            create_time: nowIso(),
+            update_time: nowIso(),
+        },
+    ],
     announcements: clone(initialAnnouncements),
     scripts: [
         {
@@ -458,7 +504,10 @@ const buildFeedbackListItem = ticket => ({
     title: ticket.title,
     priority: ticket.priority,
     create_time: ticket.create_time,
-    tag: ticket.tag || '建议',
+    publicTags: clone(ticket.publicTags || []),
+    internalTags: clone(ticket.internalTags || []),
+    developerTags: clone(ticket.developerTags || []),
+    progressTag: clone(ticket.progressTag || null),
     feedbackType: ticket.feedbackType || 'SUGGESTION',
     lastReplyTime: ticket.lastReplyTime || ticket.create_time,
     replyCount: ticket.replyCount || (ticket.details || []).length - 1,
@@ -1095,6 +1144,75 @@ app.get('/ec/recording', (req, res) => {
           ]
         : [];
     res.json(ok({ data }));
+});
+
+// Gamelog relay (admin): placeholder data only, no real business data
+app.get('/ec/gamelog/games', (_req, res) => {
+    res.json(ok({ data: ['bedwars-remake', 'buhc_sword', 'mock-game'] }));
+});
+
+app.get('/ec/gamelog/matches', (req, res) => {
+    const current = toInt(req.query.current, 1);
+    const pageSize = toInt(req.query.pageSize, 20);
+    const data = [
+        {
+            _id: 'mock-match-1',
+            sessionId: 'mock-session-uuid-001',
+            gameType: 'bedwars-remake',
+            mapName: 'mock_map',
+            gameMode: 'normal',
+            startTime: nowIso(),
+            endTime: nowIso(),
+            totalPlayers: 2,
+            roomOwner: 'mock_owner',
+            roomType: 'CUSTOM',
+        },
+    ];
+    res.json(ok({ data, pagination: { total: 1, current, pageSize } }));
+});
+
+app.get('/ec/gamelog/match-details', (req, res) => {
+    const sessionId = String(req.query.sessionId || 'mock-session-uuid-001');
+    const payload = {
+        match: {
+            _id: 'mock-match-1',
+            sessionId,
+            gameType: 'bedwars-remake',
+            mapName: 'mock_map',
+            gameMode: 'normal',
+            startTime: nowIso(),
+            endTime: nowIso(),
+            totalPlayers: 2,
+            replayId: '99999',
+            roomType: 'CUSTOM',
+            roomOwner: 'mock_owner',
+        },
+        players: [
+            { _id: 'mock-p1', sessionId, ecId: MOCK_PLAYER.ecid, playerAlias: MOCK_PLAYER.name, winTeam: true, rank: 0, kills: 1, deaths: 0 },
+        ],
+        log: [{ time: nowIso(), events: [{ chat: { ecId: MOCK_PLAYER.ecid, message: '[mock] message' } }] }],
+    };
+    res.json(ok({ data: payload }));
+});
+
+app.get('/ec/gamelog/players', (req, res) => {
+    const current = toInt(req.query.current, 1);
+    const pageSize = toInt(req.query.pageSize, 20);
+    const data = [
+        { _id: 'mock-pl-1', sessionId: 'mock-session-uuid-001', ecId: MOCK_PLAYER.ecid, playerAlias: MOCK_PLAYER.name },
+    ];
+    res.json(ok({ data, pagination: { total: 1, current, pageSize } }));
+});
+
+app.get('/ec/gamelog/pit/sessions', (req, res) => {
+    const current = toInt(req.query.current, 1);
+    const pageSize = toInt(req.query.pageSize, 20);
+    res.json(ok({ data: [], pagination: { total: 0, current, pageSize } }));
+});
+
+app.get('/ec/gamelog/pit/session-details', (req, res) => {
+    const id = String(req.query.id || 'mock-pit-id');
+    res.json(ok({ data: { session: { _id: id, serverName: 'pit', playerAlias: 'mock_player' }, log: [] } }));
 });
 
 app.get('/ec/ban', (req, res) => {
@@ -1758,6 +1876,338 @@ app.get('/item/delete', (req, res) => {
 
 // ---------------------------- 反馈相关 ----------------------------
 
+const getMockTagUsageCount = tagId =>
+    state.feedbacks.filter(ticket =>
+        [
+            ...(ticket.publicTags || []),
+            ...(ticket.internalTags || []),
+            ...(ticket.developerTags || []),
+            ...(ticket.progressTag ? [ticket.progressTag] : []),
+        ].some(tag => tag.id === tagId)
+    ).length;
+
+const findMockTagById = tagId =>
+    state.feedbackTags.find(tag => Number(tag.id) === Number(tagId)) || null;
+
+const resolveMockPrimaryTag = tag => {
+    if (!tag) return null;
+    if (!tag.aliasOfTagId) return tag;
+    return findMockTagById(tag.aliasOfTagId) || tag;
+};
+
+const getMockTagAliases = tagId =>
+    state.feedbackTags
+        .filter(tag => Number(tag.aliasOfTagId || 0) === Number(tagId))
+        .map(tag => tag.name);
+
+const getMockTagOptions = (scope, keyword = '', includeArchived = false) => {
+    const normalizedKeyword = normalizeMockTagKey(keyword);
+    return state.feedbackTags
+        .filter(tag => tag.scope === scope)
+        .filter(tag => includeArchived || tag.status === 'ACTIVE')
+        .filter(tag => {
+            if (!normalizedKeyword) return true;
+            const primaryTag = resolveMockPrimaryTag(tag);
+            const keywords = [tag.name, primaryTag?.name].filter(Boolean);
+            return keywords.some(name => normalizeMockTagKey(name).includes(normalizedKeyword));
+        })
+        .map(tag => resolveMockPrimaryTag(tag))
+        .filter(tag => tag && tag.scope === scope)
+        .filter((tag, index, list) => list.findIndex(item => item.id === tag.id) === index)
+        .map(tag => ({
+            id: tag.id,
+            name: tag.name,
+            scope: tag.scope,
+            aliases: getMockTagAliases(tag.id),
+        }));
+};
+
+const ensureMockTag = (name, scope, aliasOfTagId = null) => {
+    const normalizedKey = normalizeMockTagKey(name);
+    const existing = state.feedbackTags.find(
+        tag => tag.scope === scope && normalizeMockTagKey(tag.name) === normalizedKey
+    );
+    if (existing) {
+        existing.name = normalizeMockTagName(name);
+        existing.status = 'ACTIVE';
+        existing.aliasOfTagId = aliasOfTagId;
+        existing.update_time = nowIso();
+        return existing;
+    }
+    const nextId = Math.max(0, ...state.feedbackTags.map(tag => Number(tag.id) || 0)) + 1;
+    const created = {
+        id: nextId,
+        name: normalizeMockTagName(name),
+        scope,
+        status: 'ACTIVE',
+        aliasOfTagId,
+        create_time: nowIso(),
+        update_time: nowIso(),
+    };
+    state.feedbackTags.push(created);
+    return created;
+};
+
+const mapMockTagSummary = tag => ({
+    id: tag.id,
+    name: tag.name,
+    scope: tag.scope,
+    aliases: getMockTagAliases(tag.id),
+});
+
+const normalizeMockTagIdsByScope = (tagIds = [], scope) =>
+    parseIntArray(tagIds)
+        .map(findMockTagById)
+        .map(resolveMockPrimaryTag)
+        .filter(tag => tag && tag.scope === scope)
+        .filter((tag, index, list) => list.findIndex(item => item.id === tag.id) === index);
+
+const applyMockTagIdsToTicket = (
+    ticket,
+    publicTagIds = [],
+    internalTagIds = [],
+    developerTagIds = [],
+    progressTagId = null
+) => {
+    ticket.publicTags = normalizeMockTagIdsByScope(publicTagIds, 'PUBLIC').map(mapMockTagSummary);
+    ticket.internalTags = normalizeMockTagIdsByScope(internalTagIds, 'INTERNAL').map(
+        mapMockTagSummary
+    );
+    ticket.developerTags = normalizeMockTagIdsByScope(developerTagIds, 'DEVELOPER').map(
+        mapMockTagSummary
+    );
+    ticket.progressTag =
+        normalizeMockTagIdsByScope(progressTagId ? [progressTagId] : [], 'PROGRESS')[0] || null;
+};
+
+const MOCK_FEEDBACK_STATUS_MAP = {
+    open: ['O', 'W', 'X', 'E'],
+    closed: ['B', 'R', 'D'],
+    ended: ['A', 'P'],
+};
+
+const normalizeMockFeedbackStatus = status => {
+    if (MOCK_FEEDBACK_STATUS_MAP.open.includes(status)) return 'open';
+    if (MOCK_FEEDBACK_STATUS_MAP.closed.includes(status)) return 'closed';
+    if (MOCK_FEEDBACK_STATUS_MAP.ended.includes(status)) return 'ended';
+    return '';
+};
+
+const parseMockStatusFilters = raw => {
+    if (raw == null) return [];
+    const values = Array.isArray(raw) ? raw : [raw];
+    return values
+        .map(value => String(value).trim().toLowerCase())
+        .filter(value => ['open', 'closed', 'ended'].includes(value));
+};
+
+const normalizeMockAdvancedFilters = raw => {
+    const parsed = typeof raw === 'string' ? parseJsonSafely(raw, []) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+        .filter(item => item && typeof item === 'object')
+        .map(item => ({
+            column: String(item.column || '').trim(),
+            operator: String(item.operator || '').trim(),
+            value: item.value ?? null,
+        }))
+        .filter(item => item.column && item.operator);
+};
+
+const normalizeMockAdvancedFilterValues = value => {
+    if (Array.isArray(value)) return value;
+    if (value == null || value === '') return [];
+    return [value];
+};
+
+const getMockAdvancedFilterTagList = (item, column) => {
+    if (column === 'tags' || column === 'publicTags') {
+        return item.publicTags || [];
+    }
+    if (column === 'internalTags') {
+        return item.internalTags || [];
+    }
+    if (column === 'developerTags') {
+        return item.developerTags || [];
+    }
+    if (column === 'progressTag') {
+        return item.progressTag ? [item.progressTag] : [];
+    }
+    return [];
+};
+
+const applyMockAdvancedFilters = (items, filters) =>
+    items.filter(item =>
+        filters.every(filter => {
+            const column = String(filter.column || '').trim();
+            const operator = String(filter.operator || '').trim();
+            const values = normalizeMockAdvancedFilterValues(filter.value);
+            const firstValue = values[0];
+
+            if (!column || !operator) {
+                return true;
+            }
+
+            if (column === 'status') {
+                const normalizedItemStatus = normalizeMockFeedbackStatus(item.status);
+                const statuses = values
+                    .map(value => String(value).trim().toLowerCase())
+                    .filter(value => ['open', 'closed', 'ended'].includes(value));
+
+                if (operator === 'isEmpty') {
+                    return !normalizedItemStatus;
+                }
+                if (operator === 'isNotEmpty') {
+                    return Boolean(normalizedItemStatus);
+                }
+                if (operator === 'equals' || operator === 'contains') {
+                    return statuses.includes(normalizedItemStatus);
+                }
+                if (operator === 'notEquals' || operator === 'notContains') {
+                    return !statuses.includes(normalizedItemStatus);
+                }
+                return true;
+            }
+
+            if (
+                ['tags', 'publicTags', 'internalTags', 'developerTags', 'progressTag'].includes(
+                    column
+                )
+            ) {
+                const tagIds = getMockAdvancedFilterTagList(item, column).map(tag => Number(tag.id));
+                const expectedIds = parseIntArray(values);
+
+                if (operator === 'equals') {
+                    return expectedIds.every(tagId => tagIds.includes(tagId));
+                }
+                if (operator === 'notEquals') {
+                    return !expectedIds.every(tagId => tagIds.includes(tagId));
+                }
+                if (operator === 'contains') {
+                    return expectedIds.some(tagId => tagIds.includes(tagId));
+                }
+                if (operator === 'notContains') {
+                    return expectedIds.every(tagId => !tagIds.includes(tagId));
+                }
+                if (operator === 'isEmpty') {
+                    return tagIds.length === 0;
+                }
+                if (operator === 'isNotEmpty') {
+                    return tagIds.length > 0;
+                }
+                return true;
+            }
+
+            const itemValue = item[column];
+            const isEmptyValue =
+                itemValue == null ||
+                itemValue === '' ||
+                (Array.isArray(itemValue) && itemValue.length === 0);
+
+            if (operator === 'isEmpty') {
+                return isEmptyValue;
+            }
+            if (operator === 'isNotEmpty') {
+                return !isEmptyValue;
+            }
+
+            if (column === 'tid' || column === 'replyCount') {
+                const currentValue = Number(itemValue);
+                const targetValue = Number(firstValue);
+                if (!Number.isFinite(targetValue)) return true;
+                if (operator === 'equals') return currentValue === targetValue;
+                if (operator === 'notEquals') return currentValue !== targetValue;
+                if (operator === 'greaterThan') return currentValue > targetValue;
+                if (operator === 'greaterThanOrEqual') return currentValue >= targetValue;
+                if (operator === 'lessThan') return currentValue < targetValue;
+                if (operator === 'lessThanOrEqual') return currentValue <= targetValue;
+                return true;
+            }
+
+            if (column === 'create_time' || column === 'lastReplyTime') {
+                const currentTime = itemValue ? new Date(itemValue).getTime() : NaN;
+                const targetTime = firstValue ? new Date(String(firstValue)).getTime() : NaN;
+                if (!Number.isFinite(targetTime)) return true;
+                if (operator === 'equals') return currentTime === targetTime;
+                if (operator === 'notEquals') return currentTime !== targetTime;
+                if (operator === 'greaterThan') return currentTime > targetTime;
+                if (operator === 'greaterThanOrEqual') return currentTime >= targetTime;
+                if (operator === 'lessThan') return currentTime < targetTime;
+                if (operator === 'lessThanOrEqual') return currentTime <= targetTime;
+                return true;
+            }
+
+            const currentText = itemValue == null ? '' : String(itemValue);
+            const targetText = firstValue == null ? '' : String(firstValue);
+            if (operator === 'equals') return currentText === targetText;
+            if (operator === 'notEquals') return currentText !== targetText;
+            if (operator === 'contains') return currentText.includes(targetText);
+            if (operator === 'notContains') return !currentText.includes(targetText);
+            return true;
+        })
+    );
+
+const buildMockFeedbackSummary = items => {
+    const summary = {
+        statusCounts: {
+            total: items.length,
+            open: 0,
+            closed: 0,
+            ended: 0,
+        },
+        publicTags: [],
+        internalTags: [],
+        developerTags: [],
+        progressTags: [],
+        noProgressCount: 0,
+    };
+
+    const pushTagCounts = (accessor, target) => {
+        const countMap = new Map();
+
+        items.forEach(item => {
+            const tags = accessor(item);
+            const seenTagIds = new Set();
+            tags.forEach(tag => {
+                const tagId = Number(tag.id);
+                if (seenTagIds.has(tagId)) return;
+                seenTagIds.add(tagId);
+                const existing = countMap.get(tagId);
+                if (existing) {
+                    existing.count += 1;
+                } else {
+                    countMap.set(tagId, {
+                        tag: clone(tag),
+                        count: 1,
+                    });
+                }
+            });
+        });
+
+        target.push(
+            ...[...countMap.values()].sort(
+                (left, right) =>
+                    right.count - left.count || String(left.tag.name).localeCompare(String(right.tag.name), 'zh-Hans-CN')
+            )
+        );
+    };
+
+    items.forEach(item => {
+        const normalizedStatus = normalizeMockFeedbackStatus(item.status);
+        if (normalizedStatus === 'open') summary.statusCounts.open += 1;
+        if (normalizedStatus === 'closed') summary.statusCounts.closed += 1;
+        if (normalizedStatus === 'ended') summary.statusCounts.ended += 1;
+        if (!item.progressTag) summary.noProgressCount += 1;
+    });
+
+    pushTagCounts(item => item.publicTags || [], summary.publicTags);
+    pushTagCounts(item => item.internalTags || [], summary.internalTags);
+    pushTagCounts(item => item.developerTags || [], summary.developerTags);
+    pushTagCounts(item => (item.progressTag ? [item.progressTag] : []), summary.progressTags);
+
+    return summary;
+};
+
 app.get('/feedback/check-eligibility', (_req, res) => {
     res.json(
         ok({
@@ -1781,9 +2231,224 @@ app.get('/feedback/list', (req, res) => {
     const keyword = String(req.query.keyword || '')
         .trim()
         .toLowerCase();
-    const all = state.feedbacks.map(ticket => buildFeedbackListItem(ticket));
+    const publicTagIds = parseIntArray(req.query.publicTagIds || req.query['publicTagIds[]']);
+    const all = state.feedbacks
+        .filter(ticket =>
+            publicTagIds.length > 0
+                ? (ticket.publicTags || []).some(tag => publicTagIds.includes(tag.id))
+                : true
+        )
+        .map(ticket => buildFeedbackListItem(ticket));
     const list = keyword ? all.filter(item => item.title.toLowerCase().includes(keyword)) : all;
     res.json(ok({ list, total: list.length }));
+});
+
+app.get('/feedback/admin/list', (req, res) => {
+    const keyword = String(req.query.keyword || '')
+        .trim()
+        .toLowerCase();
+    const publicTagIds = parseIntArray(req.query.publicTagIds || req.query['publicTagIds[]']);
+    const internalTagIds = parseIntArray(req.query.internalTagIds || req.query['internalTagIds[]']);
+    const developerTagIds = parseIntArray(
+        req.query.developerTagIds || req.query['developerTagIds[]']
+    );
+    const progressTagIds = parseIntArray(req.query.progressTagIds || req.query['progressTagIds[]']);
+    const noProgressTag = String(req.query.noProgressTag || '') === 'true';
+    const feedbackType = String(req.query.type || '').trim().toUpperCase();
+    const statusFilters = parseMockStatusFilters(req.query.status);
+    const advancedFilters = normalizeMockAdvancedFilters(req.query.advancedFilters);
+    const sortBy = ['createTime', 'lastReplyTime', 'heat'].includes(String(req.query.sortBy || ''))
+        ? String(req.query.sortBy)
+        : 'createTime';
+    const order = String(req.query.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+    const page = Math.max(1, toInt(req.query.page, 1));
+    const pageSize = Math.min(50, Math.max(1, toInt(req.query.pageSize, 20)));
+
+    let all = state.feedbacks
+        .map(ticket => buildFeedbackListItem(ticket))
+        .filter(ticket =>
+            publicTagIds.length > 0
+                ? (ticket.publicTags || []).some(tag => publicTagIds.includes(tag.id))
+                : true
+        )
+        .filter(ticket =>
+            internalTagIds.length > 0
+                ? (ticket.internalTags || []).some(tag => internalTagIds.includes(tag.id))
+                : true
+        )
+        .filter(ticket =>
+            developerTagIds.length > 0
+                ? (ticket.developerTags || []).some(tag => developerTagIds.includes(tag.id))
+                : true
+        )
+        .filter(ticket => (noProgressTag ? !ticket.progressTag : true))
+        .filter(ticket =>
+            !noProgressTag && progressTagIds.length > 0
+                ? progressTagIds.includes(ticket.progressTag?.id || 0)
+                : true
+        );
+
+    if (feedbackType) {
+        all = all.filter(ticket => ticket.feedbackType === feedbackType);
+    }
+    if (statusFilters.length > 0) {
+        all = all.filter(ticket => statusFilters.includes(normalizeMockFeedbackStatus(ticket.status)));
+    }
+    if (keyword) {
+        all = all.filter(item => item.title.toLowerCase().includes(keyword));
+    }
+    if (advancedFilters.length > 0) {
+        all = applyMockAdvancedFilters(all, advancedFilters);
+    }
+
+    all.sort((left, right) => {
+        const factor = order === 'asc' ? 1 : -1;
+        if (sortBy === 'heat') {
+            return (left.replyCount - right.replyCount) * factor;
+        }
+        if (sortBy === 'lastReplyTime') {
+            return (
+                ((new Date(left.lastReplyTime || left.create_time).getTime() || 0) -
+                    (new Date(right.lastReplyTime || right.create_time).getTime() || 0)) * factor
+            );
+        }
+        return (
+            ((new Date(left.create_time).getTime() || 0) -
+                (new Date(right.create_time).getTime() || 0)) * factor
+        );
+    });
+
+    const total = all.length;
+    const summary = buildMockFeedbackSummary(all);
+    const start = (page - 1) * pageSize;
+    const list = all.slice(start, start + pageSize);
+    res.json(ok({ list, total, summary }));
+});
+
+app.get('/feedback/tags/options', (req, res) => {
+    const keyword = String(req.query.keyword || '');
+    res.json(ok({ list: getMockTagOptions('PUBLIC', keyword, false) }));
+});
+
+app.get('/feedback/admin/tags/options', (req, res) => {
+    const allowedScopes = ['PUBLIC', 'INTERNAL', 'DEVELOPER', 'PROGRESS'];
+    const scope = allowedScopes.includes(String(req.query.scope || ''))
+        ? String(req.query.scope)
+        : 'PUBLIC';
+    const keyword = String(req.query.keyword || '');
+    const includeArchived = String(req.query.includeArchived || '') === 'true';
+    res.json(ok({ list: getMockTagOptions(scope, keyword, includeArchived) }));
+});
+
+app.get('/feedback/admin/tags', (req, res) => {
+    const keyword = String(req.query.keyword || '');
+    const scope = String(req.query.scope || '');
+    const status = String(req.query.status || '');
+    const page = Math.max(1, toInt(req.query.page, 1));
+    const pageSize = Math.max(1, toInt(req.query.pageSize, 20));
+    const filtered = state.feedbackTags
+        .filter(tag => (scope ? tag.scope === scope : true))
+        .filter(tag => (status ? tag.status === status : true))
+        .filter(tag =>
+            keyword ? normalizeMockTagKey(tag.name).includes(normalizeMockTagKey(keyword)) : true
+        )
+        .map(tag => ({
+            ...tag,
+            aliasOfTagName: tag.aliasOfTagId ? resolveMockPrimaryTag(tag)?.name || null : null,
+            aliases: getMockTagAliases(tag.id),
+            usageCount: getMockTagUsageCount(tag.id),
+        }));
+    const start = (page - 1) * pageSize;
+    res.json(ok({ list: filtered.slice(start, start + pageSize), total: filtered.length }));
+});
+
+app.post('/feedback/admin/tags', (req, res) => {
+    const allowedScopes = ['PUBLIC', 'INTERNAL', 'DEVELOPER', 'PROGRESS'];
+    const scope = allowedScopes.includes(String(req.body?.scope || ''))
+        ? String(req.body.scope)
+        : 'PUBLIC';
+    const aliasOfTagId = req.body?.aliasOfTagId == null ? null : toInt(req.body.aliasOfTagId, 0);
+    const primaryTag =
+        aliasOfTagId && aliasOfTagId > 0 ? resolveMockPrimaryTag(findMockTagById(aliasOfTagId)) : null;
+    const created = ensureMockTag(req.body?.name, scope, primaryTag?.id || null);
+    res.json(
+        ok({
+            id: created.id,
+            name: created.name,
+            scope: created.scope,
+            status: created.status,
+            aliasOfTagId: created.aliasOfTagId,
+            aliasOfTagName: created.aliasOfTagId ? resolveMockPrimaryTag(created)?.name || null : null,
+            aliases: getMockTagAliases(created.id),
+        })
+    );
+});
+
+app.put('/feedback/admin/tags/:id', (req, res) => {
+    const tagId = toInt(req.params.id, 0);
+    const tag = state.feedbackTags.find(item => item.id === tagId);
+    if (tag) {
+        if (req.body?.name) {
+            tag.name = normalizeMockTagName(req.body.name);
+        }
+        if (req.body?.status) {
+            tag.status = req.body.status;
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'aliasOfTagId')) {
+            tag.aliasOfTagId =
+                req.body?.aliasOfTagId == null
+                    ? null
+                    : resolveMockPrimaryTag(findMockTagById(req.body.aliasOfTagId))?.id || null;
+        }
+        tag.update_time = nowIso();
+    }
+    res.json(
+        ok(
+            tag
+                ? {
+                      ...tag,
+                      aliasOfTagName: tag.aliasOfTagId
+                          ? resolveMockPrimaryTag(tag)?.name || null
+                          : null,
+                      aliases: getMockTagAliases(tag.id),
+                  }
+                : {}
+        )
+    );
+});
+
+app.patch('/feedback/admin/tags/:id', (req, res) => {
+    req.method = 'PUT';
+    const tagId = toInt(req.params.id, 0);
+    const tag = state.feedbackTags.find(item => item.id === tagId);
+    if (tag) {
+        if (req.body?.name) {
+            tag.name = normalizeMockTagName(req.body.name);
+        }
+        if (req.body?.status) {
+            tag.status = req.body.status;
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'aliasOfTagId')) {
+            tag.aliasOfTagId =
+                req.body?.aliasOfTagId == null
+                    ? null
+                    : resolveMockPrimaryTag(findMockTagById(req.body.aliasOfTagId))?.id || null;
+        }
+        tag.update_time = nowIso();
+    }
+    res.json(
+        ok(
+            tag
+                ? {
+                      ...tag,
+                      aliasOfTagName: tag.aliasOfTagId
+                          ? resolveMockPrimaryTag(tag)?.name || null
+                          : null,
+                      aliases: getMockTagAliases(tag.id),
+                  }
+                : {}
+        )
+    );
 });
 
 app.get('/feedback/subscriptions', (_req, res) => {
@@ -1861,12 +2526,68 @@ app.post('/feedback/settings', (req, res) => {
     res.json(ok(clone(state.feedbackSettings)));
 });
 
-app.post('/feedback/create', (_req, res) => {
-    res.json(ok({ message: '创建反馈成功(mock)' }));
+app.post('/feedback/create', (req, res) => {
+    const nextTid = Math.max(...state.feedbacks.map(ticket => ticket.tid), initialFeedback.tid) + 1;
+    const created = clone(initialFeedback);
+    created.tid = nextTid;
+    created.title = String(req.body?.title || `反馈 ${nextTid}`);
+    created.create_time = nowText();
+    created.details = [
+        {
+            id: nextTid * 10,
+            tid: nextTid,
+            displayTitle: '玩家',
+            action: 'R',
+            content: String(req.body?.details || 'mock 反馈内容'),
+            contentHtml: `<p>${String(req.body?.details || 'mock 反馈内容')}</p>`,
+            contentHtmlUser: `<p>${String(req.body?.details || 'mock 反馈内容')}</p>`,
+            attachments: [],
+            ip: '127.0.0.1',
+            create_time: nowText(),
+            isOfficial: false,
+        },
+    ];
+    created.replyCount = 0;
+    created.lastReplyTime = created.create_time;
+    applyMockTagIdsToTicket(
+        created,
+        parseIntArray(req.body?.publicTagIds),
+        parseIntArray(req.body?.internalTagIds)
+    );
+    state.feedbacks.unshift(created);
+    res.json(ok({ tid: nextTid, message: '创建反馈成功(mock)' }));
 });
 
-app.post('/feedback/create-from-ticket', (_req, res) => {
-    res.json(ok({ message: '已从工单创建反馈(mock)' }));
+app.post('/feedback/create-from-ticket', (req, res) => {
+    const nextTid = Math.max(...state.feedbacks.map(ticket => ticket.tid), initialFeedback.tid) + 1;
+    const created = clone(initialFeedback);
+    created.tid = nextTid;
+    created.title = String(req.body?.title || `反馈 ${nextTid}`);
+    created.create_time = nowText();
+    created.details = [
+        {
+            id: nextTid * 10,
+            tid: nextTid,
+            displayTitle: '玩家',
+            action: 'R',
+            content: String(req.body?.details || 'mock 反馈内容'),
+            contentHtml: `<p>${String(req.body?.details || 'mock 反馈内容')}</p>`,
+            contentHtmlUser: `<p>${String(req.body?.details || 'mock 反馈内容')}</p>`,
+            attachments: [],
+            ip: '127.0.0.1',
+            create_time: nowText(),
+            isOfficial: false,
+        },
+    ];
+    created.replyCount = 0;
+    created.lastReplyTime = created.create_time;
+    applyMockTagIdsToTicket(
+        created,
+        parseIntArray(req.body?.publicTagIds),
+        parseIntArray(req.body?.internalTagIds)
+    );
+    state.feedbacks.unshift(created);
+    res.json(ok({ tid: nextTid, title: created.title, message: '已从工单创建反馈(mock)' }));
 });
 
 app.get('/feedback/ai-generate', (req, res) => {
@@ -1897,10 +2618,6 @@ app.post('/feedback/delete', (_req, res) => {
     res.json(ok({ message: '反馈删除成功(mock)' }));
 });
 
-app.post('/feedback/tag', (_req, res) => {
-    res.json(ok({ message: '标签更新成功(mock)' }));
-});
-
 app.post('/feedback/type', (_req, res) => {
     res.json(ok({ message: '类型更新成功(mock)' }));
 });
@@ -1918,7 +2635,10 @@ app.get('/feedback/meta', (req, res) => {
     res.json(
         ok({
             tid,
-            tag: ticket?.tag || '建议',
+            publicTags: clone(ticket?.publicTags || []),
+            internalTags: clone(ticket?.internalTags || []),
+            developerTags: clone(ticket?.developerTags || []),
+            progressTag: clone(ticket?.progressTag || null),
             type: ticket?.feedbackType || 'SUGGESTION',
             subscriptions,
         })
@@ -1935,6 +2655,30 @@ app.post('/feedback/subscribe-for-user', (_req, res) => {
 
 app.post('/feedback/subscriptions/set', (_req, res) => {
     res.json(ok({ message: '订阅列表设置成功(mock)' }));
+});
+
+app.post('/feedback/admin/tags/set', (req, res) => {
+    const tid = toInt(req.body?.tid, initialFeedback.tid);
+    const ticket = state.feedbacks.find(item => item.tid === tid);
+    if (ticket) {
+        applyMockTagIdsToTicket(
+            ticket,
+            parseIntArray(req.body?.publicTagIds),
+            parseIntArray(req.body?.internalTagIds),
+            parseIntArray(req.body?.developerTagIds),
+            req.body?.progressTagId == null ? null : toInt(req.body.progressTagId, 0)
+        );
+        res.json(
+            ok({
+                publicTags: clone(ticket.publicTags || []),
+                internalTags: clone(ticket.internalTags || []),
+                developerTags: clone(ticket.developerTags || []),
+                progressTag: clone(ticket.progressTag || null),
+            })
+        );
+        return;
+    }
+    res.json(ok({ publicTags: [], internalTags: [], developerTags: [], progressTag: null }));
 });
 
 app.get('/feedback/admin/detail/:detailId', (req, res) => {
@@ -1987,6 +2731,14 @@ app.put('/feedback/admin/detail/:detailId', (req, res) => {
 
 app.post('/feedback/admin/reply', (_req, res) => {
     res.json(ok({ message: '管理员回复成功(mock)' }));
+});
+
+app.post('/feedback/admin/note', (_req, res) => {
+    res.json(ok({ detailId: 99999 }));
+});
+
+app.get('/feedback/admin/notes', (_req, res) => {
+    res.json(ok({ notes: [] }));
 });
 
 app.post('/feedback/admin/set-featured', (_req, res) => {

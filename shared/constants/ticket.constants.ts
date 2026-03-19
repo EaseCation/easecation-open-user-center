@@ -74,7 +74,6 @@ export const TARGET_LABELS: { [key in TicketType]: string } = {
 export const TICKET_TYPES_OWN_STATUS_FLOW: TicketType[] = [
     TicketType.Feedback,
     TicketType.Judgement,
-    TicketType.ManualReview,
 ];
 
 // 工单状态名称映射

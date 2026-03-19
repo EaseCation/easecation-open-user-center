@@ -12,8 +12,8 @@ import Button from 'antd/es/button';
 import theme from 'antd/es/theme';
 import Divider from 'antd/es/divider';
 import Spin from 'antd/es/spin';
-import { CrownOutlined, EllipsisOutlined } from '@ant-design/icons';
-import { TicketDetail } from '@ecuc/shared/types/ticket.types';
+import { CrownOutlined, EllipsisOutlined, LockOutlined } from '@ant-design/icons';
+import { TicketDetail, TicketAction } from '@ecuc/shared/types/ticket.types';
 import { HTMLComponent, VideoPlayerComponent } from '@common/components/Common';
 import { generateTemporaryUrl } from '@common/utils/uploadUtils';
 import { useState, useEffect } from 'react';
@@ -38,6 +38,8 @@ interface ReplyCardProps {
     /** 管理端：编辑该条 detail，传入该条回复的 detail id，由父组件打开编辑模态框 */
     onEditDetail?: (detailId: number) => void;
     marginBottom?: number;
+    /** 使用 contentHtml（管理端 URL）代替 contentHtmlUser（用户端 URL） */
+    useAdminHtml?: boolean;
 }
 
 // 附件预览组件
@@ -141,6 +143,7 @@ const ReplyCard: React.FC<ReplyCardProps> = ({
     onSetFeatured,
     onEditDetail,
     marginBottom,
+    useAdminHtml,
 }) => {
     const { useToken } = theme;
     const { token } = useToken();
@@ -155,6 +158,7 @@ const ReplyCard: React.FC<ReplyCardProps> = ({
     ) => {
         const floorNumber = startFloorNumber + index;
         const hasOperator = !!comment.operator;
+        const isNote = comment.action === TicketAction.Note;
         // 获取当前评论的所有回复
         const replies = details.filter(d => d.parentDetailId === comment.id);
 
@@ -199,7 +203,13 @@ const ReplyCard: React.FC<ReplyCardProps> = ({
                         }}
                     >
                         <Space wrap>
-                            {hasOperator && (
+                            {isNote && (
+                                <Tag color="default" style={{ margin: 0 }}>
+                                    <LockOutlined style={{ marginRight: 4, fontSize: 11 }} />
+                                    {gLang('feedback.replyAsNote')}
+                                </Tag>
+                            )}
+                            {hasOperator && !isNote && (
                                 <Tag
                                     icon={<CrownOutlined />}
                                     color={token.colorPrimary}
@@ -213,7 +223,14 @@ const ReplyCard: React.FC<ReplyCardProps> = ({
                                 </Tag>
                             )}
                             {comment.displayTitle && (
-                                <Text strong style={{ fontSize: level === 0 ? 14 : 13 }}>
+                                <Text
+                                    strong={!isNote}
+                                    style={{
+                                        fontSize: level === 0 ? 14 : 13,
+                                        color: isNote ? token.colorTextSecondary : undefined,
+                                        opacity: isNote ? 0.85 : 1,
+                                    }}
+                                >
                                     {comment.displayTitle}
                                 </Text>
                             )}
@@ -294,12 +311,16 @@ const ReplyCard: React.FC<ReplyCardProps> = ({
                             marginTop: level === 0 ? (isPC ? 16 : 12) : isPC ? 8 : 6,
                             lineHeight: 1.6,
                             wordBreak: 'break-word',
+                            color: isNote ? token.colorTextSecondary : undefined,
+                            opacity: isNote ? 0.85 : 1,
                         }}
                     >
                         <Paragraph style={{ marginBottom: 0 }}>
-                            {comment.contentHtmlUser != null && comment.contentHtmlUser !== '' ? (
-                                <HTMLComponent content={comment.contentHtmlUser} />
-                            ) : (
+                            {(() => {
+                                const html = useAdminHtml ? comment.contentHtml : comment.contentHtmlUser;
+                                return html != null && html !== '' ? (
+                                    <HTMLComponent content={html} />
+                                ) : (
                                 <>
                                     {comment.content.split('\n').map((line, lineIndex) => (
                                         <React.Fragment key={lineIndex}>
@@ -310,7 +331,8 @@ const ReplyCard: React.FC<ReplyCardProps> = ({
                                         </React.Fragment>
                                     ))}
                                 </>
-                            )}
+                                );
+                            })()}
                         </Paragraph>
                     </div>
 

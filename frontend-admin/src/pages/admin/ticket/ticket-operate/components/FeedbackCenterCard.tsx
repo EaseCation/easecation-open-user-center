@@ -18,7 +18,9 @@ import {
     Flex,
     Spin,
     Empty,
-    Grid,
+    Select,
+    Upload,
+    Segmented,
 } from 'antd';
 import {
     MessageOutlined,
@@ -28,6 +30,8 @@ import {
     CrownOutlined,
     SearchOutlined,
     ClockCircleOutlined,
+    UploadOutlined,
+    SnippetsOutlined,
 } from '@ant-design/icons';
 import { fetchData } from '@common/axiosConfig';
 import {
@@ -41,8 +45,10 @@ import useDarkMode from '@common/hooks/useDarkMode';
 import MarkdownEditor from '@common/components/MarkdownEditor/MarkdownEditor';
 import { convertUTCToFormat } from '@common/components/TimeConverter';
 import { ltransTicketStatusColor, ltransTicketStatusForUser } from '@common/languageTrans';
+import FeedbackTagGroup from '@common/components/Feedback/FeedbackTagGroup';
+import FeedbackTagSelect from '@common/components/Feedback/FeedbackTagSelect';
+import { getUploadProps } from '@common/utils/uploadUtils';
 
-const { useBreakpoint } = Grid;
 const { Panel } = Collapse;
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -85,13 +91,10 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
     const { useToken } = theme;
     const { token } = useToken();
     const isDarkMode = useDarkMode();
-    const screens = useBreakpoint();
-    const isMobile = !screens?.md;
     const [loading, setLoading] = useState(false);
     const [aiGenerating, setAiGenerating] = useState(false);
     const [rematchLoading, setRematchLoading] = useState(false);
     const [form] = Form.useForm();
-    const [subscribingTids, setSubscribingTids] = useState<Set<number>>(new Set());
     const [previewTickets, setPreviewTickets] = useState<Map<number, Ticket>>(new Map());
     // 手动打开反馈：已加入 card 的 tid 列表
     const [manualOpenTids, setManualOpenTids] = useState<number[]>([]);
@@ -107,6 +110,19 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
     const [feedbackListStatus, setFeedbackListStatus] = useState<string[]>([]);
     // 当前选中的 tab（受控），null 表示使用默认
     const [activeTabKey, setActiveTabKey] = useState<string | null>(null);
+
+    // 创建表单附件（可删除/上传）
+    const [createAttachments, setCreateAttachments] = useState<string[]>([]);
+    const [createIsUploading, setCreateIsUploading] = useState(false);
+
+    // 合并表单（match/manual tab 内发布新 detail）
+    const [mergeFormShown, setMergeFormShown] = useState(false);
+    const [mergeCreatorOpenid, setMergeCreatorOpenid] = useState('');
+    const [mergeDetails, setMergeDetails] = useState('');
+    const [mergeAttachments, setMergeAttachments] = useState<string[]>([]);
+    const [mergeIsUploading, setMergeIsUploading] = useState(false);
+    const [mergeSubmitting, setMergeSubmitting] = useState(false);
+    const [mergeFeatured, setMergeFeatured] = useState(true);
 
     const [messageApi, contextHolder] = message.useMessage();
 
@@ -140,6 +156,18 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
 
         return matches;
     }, [aiMatchDetail]);
+
+    // 原工单可摘录的 reply details（有文本内容或有附件的均可摘录）
+    const sourceReplyDetails = useMemo(() => {
+        if (!ticket?.details) return [];
+        return ticket.details.filter(
+            (d: TicketDetail) =>
+                (d.action === TicketAction.Reply || d.action === ('R' as any)) &&
+                d.operator !== 'AI_MATCH' &&
+                d.operator !== 'AUTO_SOLVE' &&
+                (d.content || (d.attachments && d.attachments.length > 0))
+        );
+    }, [ticket?.details]);
 
     // 获取AI生成的内容（如果存在）
     const [, setAiTitle] = useState<string>('');
@@ -241,6 +269,32 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
         }
     }, [matchedFeedbacks.length > 0 ? matchedFeedbacks[0].tid : null, loadTicketPreview]);
 
+    useEffect(() => {
+        form.resetFields();
+        setHasAiContent(false);
+        setAiTitle('');
+        setAiDetails('');
+        setCreatedFeedbackTid(null);
+        setSubscribedFeedbackTid(null);
+        setActiveTabKey(null);
+        setManualOpenTids([]);
+        setFeedbackListItems([]);
+        setFeedbackListTotal(0);
+        setFeedbackListPage(1);
+        setFeedbackSearchKeyword('');
+        setFeedbackListStatus([]);
+        setPreviewTickets(new Map());
+        loadedTidsRef.current = new Set();
+        setCreateAttachments([]);
+        setCreateIsUploading(false);
+        setMergeFormShown(false);
+        setMergeCreatorOpenid('');
+        setMergeDetails('');
+        setMergeAttachments([]);
+        setMergeIsUploading(false);
+        setMergeSubmitting(false);
+    }, [ticket?.tid, form]);
+
     // 如果没有AI_MATCH内容，且非强制展示（如从卡片导航在非JY工单打开），则不显示此Card
     // 注意：必须在所有hooks之后进行早期返回
     if (!aiMatchDetail && !forceShowWithoutMatch) {
@@ -249,6 +303,11 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
 
     // 当切换到标签页时加载工单详情
     const handleTabChange = (activeKey: string) => {
+        // 切换 tab 时重置合并表单
+        setMergeFormShown(false);
+        setMergeCreatorOpenid('');
+        setMergeDetails('');
+        setMergeAttachments([]);
         if (activeKey.startsWith('match-')) {
             const tid = parseInt(activeKey.replace('match-', ''));
             if (!isNaN(tid)) loadTicketPreview(tid);
@@ -288,19 +347,23 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
                 method: 'GET',
                 data: { tid: ticket.tid },
                 setData: (response: any) => {
-                    // 处理epfResponse格式：{ code: 0, data: { title, details } }
+                    // 处理epfResponse格式：{ code: 0, data: { title, details, type?, publicTagIds? } }
                     const data = response?.data || response;
                     if (data?.title && data?.details) {
                         setAiTitle(data.title);
                         setAiDetails(data.details);
                         setHasAiContent(true);
 
-                        // 设置表单默认值
+                        // 设置表单默认值（包括AI推断的类型和公开标签）
                         form.setFieldsValue({
                             title: data.title,
                             details: data.details,
                             isPublic: true,
+                            type: data.type || 'SUGGESTION',
                             subscriptions: ticket.creator_openid || '',
+                            creatorOpenid: ticket.creator_openid || '',
+                            publicTagIds: data.publicTagIds ?? [],
+                            internalTagIds: [],
                         });
 
                         messageApi.success(gLang('feedback.aiGenerateComplete'));
@@ -335,42 +398,10 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
         }
     };
 
-    // 订阅反馈（为当前工单创建者订阅）
-    const handleSubscribe = async (feedbackTid: number) => {
-        if (!ticket?.creator_openid) {
-            messageApi.warning(gLang('feedback.cannotGetUserInfo'));
-            return;
-        }
-
-        setSubscribingTids(prev => new Set(prev).add(feedbackTid));
-
-        try {
-            await fetchData({
-                url: '/feedback/subscribe-for-user',
-                method: 'POST',
-                data: {
-                    tid: feedbackTid,
-                    targetOpenid: ticket.creator_openid,
-                    sourceTid: ticket.tid, // 传递源工单ID，用于写入detail
-                },
-                setData: () => {
-                    setSubscribedFeedbackTid(feedbackTid);
-                    messageApi.success(gLang('feedback.subscriptionSuccess'));
-                    // 刷新工单详情以显示新写入的detail
-                    if (onRefresh) {
-                        onRefresh();
-                    }
-                },
-            });
-        } catch {
-            messageApi.error(gLang('feedback.subscriptionFailed'));
-        } finally {
-            setSubscribingTids(prev => {
-                const next = new Set(prev);
-                next.delete(feedbackTid);
-                return next;
-            });
-        }
+    // 展开合并表单
+    const handleMergeRevealForm = () => {
+        setMergeFormShown(true);
+        setMergeCreatorOpenid(ticket?.creator_openid || '');
     };
 
     // 加入反馈中心
@@ -394,7 +425,7 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
                       .filter((line: string) => line.length > 0)
                 : [];
 
-            // 使用新接口创建反馈（从工单创建）
+            // 使用新接口创建反馈（从工单创建），附件直接由 createAttachments 管理
             await fetchData({
                 url: '/feedback/create-from-ticket',
                 method: 'POST',
@@ -403,7 +434,13 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
                     title: values.title,
                     details: values.details,
                     isPublic: values.isPublic ?? true,
+                    files: createAttachments,
+                    syncAttachments: false, // 附件由 files 字段直接管理
                     subscriptions: subscriptionsList,
+                    publicTagIds: values.publicTagIds ?? [],
+                    internalTagIds: values.internalTagIds ?? [],
+                    type: values.type || 'SUGGESTION',
+                    creatorOpenid: values.creatorOpenid || undefined,
                 },
                 setData: (response: { tid: number; title: string }) => {
                     if (response?.tid) {
@@ -420,6 +457,7 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
             setHasAiContent(false);
             setAiTitle('');
             setAiDetails('');
+            setCreateAttachments([]);
 
             // 刷新工单详情（会自动显示新创建的回复）
             if (onRefresh) {
@@ -437,111 +475,513 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
         }
     };
 
-    // 新建反馈标签页内容
-    const renderCreateTab = () => (
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            {/* AI生成按钮 */}
-            {!hasAiContent && (
-                <Button
-                    type="default"
-                    icon={<RobotOutlined />}
-                    onClick={handleAIGenerate}
-                    loading={aiGenerating}
+    // 合并：订阅用户 + 发布新 detail 到已有反馈
+    const handleMergeJoin = async (feedbackTid: number) => {
+        if (!mergeDetails.trim()) {
+            messageApi.warning(gLang('feedback.contentRequired'));
+            return;
+        }
+        setMergeSubmitting(true);
+        try {
+            // 1. 订阅用户到反馈
+            await fetchData({
+                url: '/feedback/subscribe-for-user',
+                method: 'POST',
+                data: {
+                    tid: feedbackTid,
+                    targetOpenid: mergeCreatorOpenid || ticket?.creator_openid,
+                    sourceTid: ticket?.tid,
+                },
+                setData: () => {},
+            });
+            // 2. 以工单发布者身份发布新 detail
+            let createdDetailId: number | null = null;
+            await fetchData({
+                url: '/feedback/admin/reply',
+                method: 'POST',
+                data: {
+                    tid: feedbackTid,
+                    details: mergeDetails.trim(),
+                    files: mergeAttachments,
+                    authorOpenid: mergeCreatorOpenid || undefined,
+                },
+                setData: (response: any) => {
+                    const data = response?.data || response;
+                    if (data?.detailId) {
+                        createdDetailId = data.detailId;
+                    }
+                },
+            });
+
+            // 3. 如需要，将该条回复设为精华
+            if (mergeFeatured && createdDetailId != null) {
+                await fetchData({
+                    url: '/feedback/admin/set-featured',
+                    method: 'POST',
+                    data: {
+                        tid: feedbackTid,
+                        detail_id: createdDetailId,
+                    },
+                    setData: () => {},
+                });
+            }
+            setSubscribedFeedbackTid(feedbackTid);
+            messageApi.success(gLang('feedback.mergeSuccess'));
+            setMergeDetails('');
+            setMergeAttachments([]);
+            setMergeFormShown(false);
+            if (onRefresh) onRefresh();
+        } catch {
+            messageApi.error(gLang('feedback.mergeFailed'));
+        } finally {
+            setMergeSubmitting(false);
+        }
+    };
+
+    // 从 detail 附件中提取路径字符串
+    const extractAttachmentPaths = (attachments: any[]): string[] => {
+        if (!attachments?.length) return [];
+        return attachments
+            .map(a => (typeof a === 'string' ? a : (a && typeof a === 'object' ? (a as any).url || '' : '')))
+            .filter(Boolean);
+    };
+
+    // 将某条 detail 内容以代码块形式摘录到目标输入框，同时添加该 detail 的附件
+    const handleExcerptDetail = (content: string, attachments: any[], target: 'create' | 'merge') => {
+        if (content) {
+            const codeBlock = '\n```\n' + content + '\n```\n';
+            if (target === 'create') {
+                const current = form.getFieldValue('details') || '';
+                form.setFieldValue('details', current + codeBlock);
+            } else {
+                setMergeDetails(prev => prev + codeBlock);
+            }
+        }
+        const paths = extractAttachmentPaths(attachments);
+        if (paths.length > 0) {
+            if (target === 'create') {
+                setCreateAttachments(prev => {
+                    const existing = new Set(prev);
+                    return [...prev, ...paths.filter(p => !existing.has(p))];
+                });
+            } else {
+                setMergeAttachments(prev => {
+                    const existing = new Set(prev);
+                    return [...prev, ...paths.filter(p => !existing.has(p))];
+                });
+            }
+        }
+        messageApi.success(gLang('feedback.excerptInserted'));
+    };
+
+    // 渲染附件列表（可删除）
+    const renderAttachmentList = (attachments: string[], setAttachments: (v: string[]) => void) => (
+        <Flex wrap="wrap" gap={6} style={{ marginBottom: attachments.length > 0 ? 6 : 0 }}>
+            {attachments.map(path => {
+                const fileName = path.substring(path.lastIndexOf('/') + 1);
+                return (
+                    <Tag
+                        key={path}
+                        closable
+                        onClose={() => setAttachments(attachments.filter(a => a !== path))}
+                        style={{ margin: 0 }}
+                    >
+                        {fileName}
+                    </Tag>
+                );
+            })}
+        </Flex>
+    );
+
+    // 渲染从原工单摘录内容区域
+    const renderExcerptSection = (target: 'create' | 'merge') => {
+        if (sourceReplyDetails.length === 0) return null;
+        return (
+            <Collapse size="small" style={{ marginBottom: 8 }}>
+                <Panel
+                    header={
+                        <Space size={4}>
+                            <SnippetsOutlined />
+                            <span>{gLang('feedback.excerptFromTicketDetail')}</span>
+                        </Space>
+                    }
+                    key="excerpt"
                 >
-                    {gLang('feedback.aiGenerateFeedback')}
-                </Button>
-            )}
-
-            {/* AI生成的内容 */}
-            {hasAiContent && (
-                <Collapse defaultActiveKey={['1']}>
-                    <Panel header={gLang('feedback.aiGeneratedContent')} key="1">
-                        <Form
-                            form={form}
-                            layout="vertical"
-                            initialValues={{
-                                isPublic: true,
-                                subscriptions: ticket?.creator_openid || '',
-                            }}
-                        >
-                            <Form.Item
-                                name="title"
-                                label={gLang('feedback.formTitle')}
-                                rules={[
-                                    { required: true, message: gLang('feedback.titleRequired') },
-                                    { max: 100, message: gLang('feedback.titleMaxLength') },
-                                ]}
+                    <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                        {sourceReplyDetails.map((d: TicketDetail) => (
+                            <div
+                                key={d.id}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: 8,
+                                    marginBottom: 8,
+                                }}
                             >
-                                <Input placeholder={gLang('feedback.feedbackTitlePlaceholder')} />
-                            </Form.Item>
+                                <Button
+                                    size="small"
+                                    type="dashed"
+                                    icon={<SnippetsOutlined />}
+                                    onClick={() => handleExcerptDetail(d.content || '', d.attachments || [], target)}
+                                    style={{ flexShrink: 0 }}
+                                >
+                                    {gLang('feedback.excerptDetail')}
+                                    {d.attachments?.length ? ` (+${d.attachments.length})` : ''}
+                                </Button>
+                                <Text
+                                    type="secondary"
+                                    style={{ fontSize: 12, flex: 1, wordBreak: 'break-word' }}
+                                >
+                                    {d.displayTitle ? (
+                                        <Text type="secondary" style={{ marginRight: 4 }}>
+                                            [{d.displayTitle}]
+                                        </Text>
+                                    ) : null}
+                                    {(d.content || '').substring(0, 120)}
+                                    {(d.content || '').length > 120 ? '...' : ''}
+                                </Text>
+                            </div>
+                        ))}
+                    </div>
+                </Panel>
+            </Collapse>
+        );
+    };
 
-                            <Form.Item
-                                name="details"
-                                label={gLang('feedback.replyMessage')}
-                                rules={[
-                                    { required: true, message: gLang('feedback.contentRequired') },
-                                ]}
-                            >
-                                <MarkdownEditor
-                                    placeholder={gLang('feedback.feedbackDetailsPlaceholder')}
-                                    minRows={4}
-                                    maxRows={12}
-                                />
-                            </Form.Item>
+    // 合并场景：AI 生成回复内容
+    const handleMergeAIGenerate = async (feedbackTid: number) => {
+        if (!ticket?.tid || !feedbackTid) return;
+        try {
+            setMergeSubmitting(true);
+            await fetchData({
+                url: '/feedback/ai-generate-merge-reply',
+                method: 'GET',
+                data: { sourceTid: ticket.tid, feedbackTid },
+                setData: (response: any) => {
+                    const data = response?.data || response;
+                    if (data?.details) {
+                        setMergeDetails(data.details);
+                        messageApi.success(gLang('feedback.aiGenerateComplete'));
+                    }
+                },
+            });
+        } catch {
+            messageApi.error(gLang('feedback.aiGenerateFailed'));
+        } finally {
+            setMergeSubmitting(false);
+        }
+    };
 
-                            <Form.Item
-                                name="isPublic"
-                                label={gLang('feedback.isPublic')}
-                                valuePropName="checked"
-                            >
-                                <Switch
-                                    checkedChildren={gLang('feedback.public')}
-                                    unCheckedChildren={gLang('feedback.private')}
-                                />
-                            </Form.Item>
-
-                            <Form.Item
-                                name="subscriptions"
-                                label={gLang('feedback.subscriptions')}
-                                help={gLang('feedback.subscriptionsHelp')}
-                            >
-                                <TextArea
-                                    rows={3}
-                                    placeholder={gLang('feedback.subscriptionsPlaceholder')}
-                                />
-                            </Form.Item>
-                        </Form>
-                    </Panel>
-                </Collapse>
-            )}
-
-            {/* 创建成功提示 */}
-            {createdFeedbackTid && (
-                <div
-                    style={{
-                        padding: '8px 12px',
-                        background: isDarkMode ? '#162312' : '#f6ffed',
-                        border: `1px solid ${isDarkMode ? '#274916' : '#b7eb8f'}`,
-                        borderRadius: '4px',
-                        color: isDarkMode ? '#73d13d' : '#52c41a',
+    // 渲染合并卡片：点击订阅按钮展开编辑表单，再点击加入反馈中心提交
+    const renderMergeCard = (feedbackTid: number) => {
+        if (!mergeFormShown) {
+            return (
+                <Button
+                    type="primary"
+                    icon={<UserAddOutlined />}
+                    onClick={async () => {
+                        handleMergeRevealForm();
+                        await handleMergeAIGenerate(feedbackTid);
                     }}
                 >
-                    {gLang('feedback.createSuccessWithTid', { tid: createdFeedbackTid })}
-                </div>
-            )}
+                    {gLang('feedback.addUserToSubscription')}
+                </Button>
+            );
+        }
 
-            {/* 加入反馈中心按钮 */}
-            <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={handleCreateFeedback}
-                loading={loading}
-                disabled={!hasAiContent}
+        const mergeUploadProps = getUploadProps(
+            10,
+            mergeAttachments,
+            setMergeAttachments,
+            messageApi,
+            setMergeIsUploading
+        );
+        return (
+            <div
+                style={{
+                    border: `1px solid ${isDarkMode ? token.colorBorderSecondary : '#d9d9d9'}`,
+                    borderRadius: 8,
+                    padding: 16,
+                    background: isDarkMode ? token.colorFillAlter : '#fafafa',
+                }}
             >
-                {gLang('feedback.joinFeedbackCenter')}
-            </Button>
-        </Space>
-    );
+                <Space direction="vertical" style={{ width: '100%' }} size="small">
+                    {/* 工单发布者 openid（作为 detail 发布者身份） */}
+                    <div>
+                        <Text strong style={{ fontSize: 12 }}>
+                            {gLang('feedback.creatorOpenid')}
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
+                            {gLang('feedback.creatorOpenidMergeHelp')}
+                        </Text>
+                        <Input
+                            value={mergeCreatorOpenid}
+                            onChange={e => setMergeCreatorOpenid(e.target.value)}
+                            placeholder="openid"
+                            size="small"
+                            style={{ marginTop: 4 }}
+                        />
+                    </div>
+
+                    {/* 内容编辑器（初次展开时已自动调用 AI 生成） */}
+                    <MarkdownEditor
+                        value={mergeDetails}
+                        onChange={(val: string) => setMergeDetails(val)}
+                        placeholder={gLang('feedback.mergeDetailPlaceholder')}
+                        minRows={4}
+                        maxRows={12}
+                    />
+
+                    {/* 从原工单摘录 */}
+                    {renderExcerptSection('merge')}
+
+                    {/* 精华开关 */}
+                    <div>
+                        <Text strong style={{ fontSize: 12, marginRight: 8 }}>
+                            {gLang('feedback.featured')}
+                        </Text>
+                        <Switch
+                            size="small"
+                            checked={mergeFeatured}
+                            onChange={setMergeFeatured}
+                        />
+                        <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
+                            {gLang('feedback.mergeFeaturedHelp')}
+                        </Text>
+                    </div>
+
+                    {/* 附件列表 */}
+                    {mergeAttachments.length > 0 &&
+                        renderAttachmentList(mergeAttachments, setMergeAttachments)}
+
+                    {/* 上传 + 提交 */}
+                    <Space>
+                        <Upload {...mergeUploadProps} showUploadList={false}>
+                            <Button
+                                icon={<UploadOutlined />}
+                                size="small"
+                                loading={mergeIsUploading}
+                            >
+                                {gLang('feedback.uploadAttachments')}
+                            </Button>
+                        </Upload>
+                        <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={() => handleMergeJoin(feedbackTid)}
+                            loading={mergeSubmitting}
+                            disabled={!mergeDetails.trim()}
+                        >
+                            {gLang('feedback.joinFeedbackCenter')}
+                        </Button>
+                    </Space>
+                </Space>
+            </div>
+        );
+    };
+
+    // 新建反馈标签页内容
+    const renderCreateTab = () => {
+        const createUploadProps = getUploadProps(
+            10,
+            createAttachments,
+            setCreateAttachments,
+            messageApi,
+            setCreateIsUploading
+        );
+        return (
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                {/* AI生成按钮 */}
+                {!hasAiContent && (
+                    <Button
+                        type="default"
+                        icon={<RobotOutlined />}
+                        onClick={handleAIGenerate}
+                        loading={aiGenerating}
+                    >
+                        {gLang('feedback.aiGenerateFeedback')}
+                    </Button>
+                )}
+
+                {/* AI生成的内容 */}
+                {hasAiContent && (
+                    <Collapse defaultActiveKey={['1']}>
+                        <Panel header={gLang('feedback.aiGeneratedContent')} key="1">
+                            <Form
+                                form={form}
+                                layout="vertical"
+                                initialValues={{
+                                    isPublic: true,
+                                    type: 'SUGGESTION',
+                                    subscriptions: ticket?.creator_openid || '',
+                                    creatorOpenid: ticket?.creator_openid || '',
+                                    publicTagIds: [],
+                                    internalTagIds: [],
+                                }}
+                            >
+                                {/* 反馈类型 */}
+                                <Form.Item
+                                    name="type"
+                                    label={gLang('feedback.feedbackTypeLabel')}
+                                >
+                                    <Segmented
+                                        options={[
+                                            {
+                                                value: 'SUGGESTION',
+                                                label: gLang('feedback.typeSuggestion'),
+                                            },
+                                            {
+                                                value: 'BUG',
+                                                label: gLang('feedback.typeBug'),
+                                            },
+                                        ]}
+                                    />
+                                </Form.Item>
+
+                                {/* 工单发布者 openid（首条 detail 的身份） */}
+                                <Form.Item
+                                    name="creatorOpenid"
+                                    label={gLang('feedback.creatorOpenid')}
+                                    help={gLang('feedback.creatorOpenidCreateHelp')}
+                                >
+                                    <Input placeholder="openid" />
+                                </Form.Item>
+
+                                <Form.Item
+                                    name="title"
+                                    label={gLang('feedback.formTitle')}
+                                    rules={[
+                                        {
+                                            required: true,
+                                            message: gLang('feedback.titleRequired'),
+                                        },
+                                        { max: 100, message: gLang('feedback.titleMaxLength') },
+                                    ]}
+                                >
+                                    <Input
+                                        placeholder={gLang('feedback.feedbackTitlePlaceholder')}
+                                    />
+                                </Form.Item>
+
+                                <Form.Item
+                                    name="details"
+                                    label={gLang('feedback.replyMessage')}
+                                    rules={[
+                                        {
+                                            required: true,
+                                            message: gLang('feedback.contentRequired'),
+                                        },
+                                    ]}
+                                >
+                                    <MarkdownEditor
+                                        placeholder={gLang(
+                                            'feedback.feedbackDetailsPlaceholder'
+                                        )}
+                                        minRows={4}
+                                        maxRows={12}
+                                    />
+                                </Form.Item>
+
+                                {/* 从原工单摘录 */}
+                                {renderExcerptSection('create')}
+
+                                <Form.Item
+                                    name="isPublic"
+                                    label={gLang('feedback.isPublic')}
+                                    valuePropName="checked"
+                                >
+                                    <Switch
+                                        checkedChildren={gLang('feedback.public')}
+                                        unCheckedChildren={gLang('feedback.private')}
+                                    />
+                                </Form.Item>
+
+                                {/* 附件管理（可删除/上传） */}
+                                <Form.Item label={gLang('feedback.attachmentsLabel')}>
+                                    {renderAttachmentList(createAttachments, setCreateAttachments)}
+                                    <Upload {...createUploadProps} showUploadList={false}>
+                                        <Button
+                                            icon={<UploadOutlined />}
+                                            size="small"
+                                            loading={createIsUploading}
+                                        >
+                                            {gLang('feedback.uploadAttachments')}
+                                        </Button>
+                                    </Upload>
+                                </Form.Item>
+
+                                <Form.Item
+                                    name="publicTagIds"
+                                    label={gLang('feedback.publicTag')}
+                                    initialValue={[]}
+                                >
+                                    <FeedbackTagSelect
+                                        admin
+                                        scope="PUBLIC"
+                                        placeholder={gLang('feedback.selectPublicTag')}
+                                        style={{ width: '100%' }}
+                                    />
+                                </Form.Item>
+
+                                <Form.Item
+                                    name="internalTagIds"
+                                    label={gLang('feedback.internalTag')}
+                                    initialValue={[]}
+                                >
+                                    <FeedbackTagSelect
+                                        admin
+                                        allowCreate
+                                        scope="INTERNAL"
+                                        placeholder={gLang(
+                                            'feedback.selectOrCreateInternalTag'
+                                        )}
+                                        style={{ width: '100%' }}
+                                    />
+                                </Form.Item>
+
+                                <Form.Item
+                                    name="subscriptions"
+                                    label={gLang('feedback.subscriptions')}
+                                    help={gLang('feedback.subscriptionsHelp')}
+                                >
+                                    <TextArea
+                                        rows={3}
+                                        placeholder={gLang('feedback.subscriptionsPlaceholder')}
+                                    />
+                                </Form.Item>
+                            </Form>
+                        </Panel>
+                    </Collapse>
+                )}
+
+                {/* 创建成功提示 */}
+                {createdFeedbackTid && (
+                    <div
+                        style={{
+                            padding: '8px 12px',
+                            background: isDarkMode ? '#162312' : '#f6ffed',
+                            border: `1px solid ${isDarkMode ? '#274916' : '#b7eb8f'}`,
+                            borderRadius: '4px',
+                            color: isDarkMode ? '#73d13d' : '#52c41a',
+                        }}
+                    >
+                        {gLang('feedback.createSuccessWithTid', { tid: createdFeedbackTid })}
+                    </div>
+                )}
+
+                {/* 加入反馈中心按钮 */}
+                <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={handleCreateFeedback}
+                    loading={loading}
+                    disabled={!hasAiContent}
+                >
+                    {gLang('feedback.joinFeedbackCenter')}
+                </Button>
+            </Space>
+        );
+    };
 
     // 简化的回复卡片组件（只看 operator，有 operator 即官方）
     const SimpleReplyCard: React.FC<{ detail: TicketDetail; floorNumber: number }> = ({
@@ -592,6 +1032,20 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
                 <div
                     style={{ lineHeight: 1.6, wordBreak: 'break-word' }}
                     className="feedback-reply-content"
+                    onClick={(e) => {
+                        const target = (e.target as HTMLElement).closest('a');
+                        if (!target) return;
+                        const href = target.getAttribute('href');
+                        if (!href || !href.startsWith('/')) return;
+                        e.preventDefault();
+                        const tidMatch = href.match(/^\/ticket\/operate\/backToMy\/(\d+)$/);
+                        if (tidMatch) {
+                            window.dispatchEvent(new CustomEvent('openTidFromDetail', { detail: { tid: Number(tidMatch[1]) } }));
+                        } else {
+                            window.history.pushState({}, '', href);
+                            window.dispatchEvent(new PopStateEvent('popstate'));
+                        }
+                    }}
                     {...(detail.contentHtml != null && detail.contentHtml !== ''
                         ? { dangerouslySetInnerHTML: { __html: detail.contentHtml } }
                         : {
@@ -677,14 +1131,7 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
                     </div>
                 )}
 
-                <Button
-                    type="primary"
-                    icon={<UserAddOutlined />}
-                    onClick={() => handleSubscribe(matched.tid)}
-                    loading={subscribingTids.has(matched.tid)}
-                >
-                    {gLang('feedback.addUserToSubscription')}
-                </Button>
+                {renderMergeCard(matched.tid)}
             </Space>
         );
     };
@@ -749,14 +1196,7 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
                         {gLang('feedback.subscriptionSuccess')}
                     </div>
                 )}
-                <Button
-                    type="primary"
-                    icon={<UserAddOutlined />}
-                    onClick={() => handleSubscribe(tid)}
-                    loading={subscribingTids.has(tid)}
-                >
-                    {gLang('feedback.addUserToSubscription')}
-                </Button>
+                {renderMergeCard(tid)}
             </Space>
         );
     };
@@ -764,162 +1204,79 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
     // 手动打开反馈：列表（无添加/删除按钮），点击项将 tid 加入 card tab
     const renderManualPickerTab = () => (
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Flex
-                wrap="wrap"
-                gap={8}
-                style={isMobile ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}
-            >
+            <Space direction="vertical" size={10} style={{ width: '100%', marginBottom: 12 }}>
                 <Input
                     placeholder={gLang('feedback.searchPlaceholder')}
                     prefix={<SearchOutlined />}
                     value={feedbackSearchKeyword}
                     onChange={e => setFeedbackSearchKeyword(e.target.value)}
-                    style={
-                        isMobile
-                            ? { width: '100%', minWidth: 0 }
-                            : { minWidth: 200, flex: '0 0 auto' }
-                    }
                     allowClear
                     size="small"
+                    style={{ width: '100%' }}
                     onPressEnter={() => {
                         setFeedbackListPage(1);
                         queryFeedbackList(1, false);
                     }}
                 />
-                <Flex
-                    gap={4}
-                    wrap="wrap"
-                    style={{
-                        maxWidth: isMobile ? 'none' : '400px',
-                        width: isMobile ? '100%' : undefined,
-                    }}
-                >
-                    <Tag
-                        color={feedbackListStatus.length === 0 ? 'blue' : 'default'}
-                        onClick={() => setFeedbackListStatus([])}
-                        style={{
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            padding: '4px 12px',
-                            flex: isMobile ? '1 1 calc(50% - 4px)' : 1,
-                            minWidth: isMobile ? 0 : undefined,
-                            textAlign: 'center',
-                            backgroundColor:
-                                feedbackListStatus.length === 0
-                                    ? undefined
-                                    : isDarkMode
-                                      ? '#1f1f1f'
-                                      : '#fafafa',
-                            border:
-                                feedbackListStatus.length === 0
-                                    ? undefined
-                                    : isDarkMode
-                                      ? '1px solid #303030'
-                                      : '1px solid #f0f0f0',
-                            color: isDarkMode ? '#d9d9d9' : '#333',
+                <Flex gap={8} style={{ width: '100%' }}>
+                    <Select
+                        value="createTime_desc"
+                        size="small"
+                        options={[
+                            {
+                                value: 'createTime_desc',
+                                label: gLang('feedback.sortCreateTime') + ' ↓',
+                            },
+                            {
+                                value: 'createTime_asc',
+                                label: gLang('feedback.sortCreateTime') + ' ↑',
+                            },
+                        ]}
+                        style={{ flex: 1 }}
+                    />
+                    <Select
+                        size="small"
+                        value=""
+                        options={[
+                            { value: '', label: gLang('feedback.typeAll') },
+                            { value: 'SUGGESTION', label: gLang('feedback.typeSuggestion') },
+                            { value: 'BUG', label: gLang('feedback.typeBug') },
+                        ]}
+                        style={{ flex: 1 }}
+                    />
+                    <Select
+                        size="small"
+                        value={feedbackListStatus.length === 1 ? feedbackListStatus[0] : ''}
+                        onChange={(value: string) => {
+                            setFeedbackListStatus(value ? [value] : []);
                         }}
-                    >
-                        {gLang('feedback.allStatus')}
-                    </Tag>
-                    <Tag
-                        color={feedbackListStatus.includes('open') ? 'blue' : 'default'}
-                        onClick={() => {
-                            if (feedbackListStatus.includes('open')) {
-                                setFeedbackListStatus(feedbackListStatus.filter(s => s !== 'open'));
-                            } else {
-                                setFeedbackListStatus([...feedbackListStatus, 'open']);
-                            }
-                        }}
-                        style={{
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            padding: '4px 12px',
-                            flex: isMobile ? '1 1 calc(50% - 4px)' : 1,
-                            minWidth: isMobile ? 0 : undefined,
-                            textAlign: 'center',
-                            backgroundColor: feedbackListStatus.includes('open')
-                                ? undefined
-                                : isDarkMode
-                                  ? '#1f1f1f'
-                                  : '#fafafa',
-                            border: feedbackListStatus.includes('open')
-                                ? undefined
-                                : isDarkMode
-                                  ? '1px solid #303030'
-                                  : '1px solid #f0f0f0',
-                            color: isDarkMode ? '#d9d9d9' : '#333',
-                        }}
-                    >
-                        {gLang('feedback.status.open')}
-                    </Tag>
-                    <Tag
-                        color={feedbackListStatus.includes('closed') ? 'blue' : 'default'}
-                        onClick={() => {
-                            if (feedbackListStatus.includes('closed')) {
-                                setFeedbackListStatus(
-                                    feedbackListStatus.filter(s => s !== 'closed')
-                                );
-                            } else {
-                                setFeedbackListStatus([...feedbackListStatus, 'closed']);
-                            }
-                        }}
-                        style={{
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            padding: '4px 12px',
-                            flex: isMobile ? '1 1 calc(50% - 4px)' : 1,
-                            minWidth: isMobile ? 0 : undefined,
-                            textAlign: 'center',
-                            backgroundColor: feedbackListStatus.includes('closed')
-                                ? undefined
-                                : isDarkMode
-                                  ? '#1f1f1f'
-                                  : '#fafafa',
-                            border: feedbackListStatus.includes('closed')
-                                ? undefined
-                                : isDarkMode
-                                  ? '1px solid #303030'
-                                  : '1px solid #f0f0f0',
-                            color: isDarkMode ? '#d9d9d9' : '#333',
-                        }}
-                    >
-                        {gLang('feedback.status.closed')}
-                    </Tag>
-                    <Tag
-                        color={feedbackListStatus.includes('ended') ? 'blue' : 'default'}
-                        onClick={() => {
-                            if (feedbackListStatus.includes('ended')) {
-                                setFeedbackListStatus(
-                                    feedbackListStatus.filter(s => s !== 'ended')
-                                );
-                            } else {
-                                setFeedbackListStatus([...feedbackListStatus, 'ended']);
-                            }
-                        }}
-                        style={{
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            padding: '4px 12px',
-                            flex: isMobile ? '1 1 calc(50% - 4px)' : 1,
-                            minWidth: isMobile ? 0 : undefined,
-                            textAlign: 'center',
-                            backgroundColor: feedbackListStatus.includes('ended')
-                                ? undefined
-                                : isDarkMode
-                                  ? '#1f1f1f'
-                                  : '#fafafa',
-                            border: feedbackListStatus.includes('ended')
-                                ? undefined
-                                : isDarkMode
-                                  ? '1px solid #303030'
-                                  : '1px solid #f0f0f0',
-                            color: isDarkMode ? '#d9d9d9' : '#333',
-                        }}
-                    >
-                        {gLang('feedback.status.ended')}
-                    </Tag>
+                        options={[
+                            { value: '', label: gLang('feedback.allStatus') },
+                            { value: 'open', label: gLang('feedback.status.open') },
+                            { value: 'closed', label: gLang('feedback.status.closed') },
+                            { value: 'ended', label: gLang('feedback.status.ended') },
+                        ]}
+                        style={{ flex: 1 }}
+                    />
                 </Flex>
-            </Flex>
+                <FeedbackTagSelect
+                    admin
+                    scope="PUBLIC"
+                    value={[]}
+                    onChange={() => {
+                        // 公开标签筛选
+                    }}
+                    placeholder={gLang('feedback.filterPublicTagPlaceholder')}
+                    style={{ width: '100%' }}
+                />
+                <FeedbackTagSelect
+                    admin
+                    scope="INTERNAL"
+                    value={[]}
+                    placeholder={gLang('feedback.filterInternalTagPlaceholder')}
+                    style={{ width: '100%' }}
+                />
+            </Space>
             {feedbackListSpinning ? (
                 <Spin spinning style={{ width: '100%', padding: '24px 0' }}>
                     <div style={{ minHeight: 120 }} />
@@ -968,9 +1325,9 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
                                                     <Text strong style={{ fontSize: 14 }}>
                                                         {title || `TID#${item.tid}`}
                                                     </Text>
-                                                    {item.tag ? (
-                                                        <Tag color="blue">{item.tag}</Tag>
-                                                    ) : null}
+                                                    <FeedbackTagGroup
+                                                        publicTags={item.publicTags}
+                                                    />
                                                     {item.feedbackType === 'BUG' ? (
                                                         <Tag color="red">
                                                             {gLang('feedback.typeBug')}

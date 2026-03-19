@@ -1,14 +1,16 @@
 /**
- * Modal for editing feedback ticket meta only: subscriptions, tag, type, status.
- * Status/type/subscriptions auto-save; tag keeps manual save button.
+ * Modal for editing feedback ticket meta only: subscriptions, public/internal tags, type, status.
+ * Status/type/subscriptions auto-save; tag assignments keep a dedicated save action.
  */
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Modal, Card, Space, Input, Button, message, Spin, Segmented } from 'antd';
-import { MinusOutlined, PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
+import { Modal, Card, Space, Input, Button, message, Spin, Segmented, Typography } from 'antd';
+import { MinusOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { fetchData, submitData } from '@common/axiosConfig';
 import { gLang } from '@common/language';
-import { TicketStatus } from '@ecuc/shared/types/ticket.types';
+import { FeedbackTagSummary, TicketStatus } from '@ecuc/shared/types/ticket.types';
+import FeedbackTagSelect from '@common/components/Feedback/FeedbackTagSelect';
+import FeedbackProgressSelect from '@common/components/Feedback/FeedbackProgressSelect';
 
 const SUBS_DEBOUNCE_MS = 800;
 
@@ -33,6 +35,7 @@ export interface FeedbackMetaEditModalProps {
     currentStatus?: TicketStatus;
     onClose: () => void;
     onSaved?: () => void;
+    onProgressChanged?: (newTag: FeedbackTagSummary | null, oldTag: FeedbackTagSummary | null) => void;
 }
 
 export const FeedbackMetaEditModal: React.FC<FeedbackMetaEditModalProps> = ({
@@ -41,9 +44,9 @@ export const FeedbackMetaEditModal: React.FC<FeedbackMetaEditModalProps> = ({
     currentStatus,
     onClose,
     onSaved,
+    onProgressChanged,
 }) => {
     const [loading, setLoading] = useState(false);
-    const [tagInput, setTagInput] = useState('');
     const [tagSaving, setTagSaving] = useState(false);
     const [typeValue, setTypeValue] = useState<'SUGGESTION' | 'BUG'>('SUGGESTION');
     const [typeSaving, setTypeSaving] = useState(false);
@@ -56,6 +59,13 @@ export const FeedbackMetaEditModal: React.FC<FeedbackMetaEditModalProps> = ({
     const lastSavedSubsRef = useRef<string>('');
     const [modal, modalContextHolder] = Modal.useModal();
     const [messageApi, contextHolder] = message.useMessage();
+    const [publicTagIds, setPublicTagIds] = useState<number[]>([]);
+    const [internalTagIds, setInternalTagIds] = useState<number[]>([]);
+    const [developerTagIds, setDeveloperTagIds] = useState<number[]>([]);
+    const [publicTags, setPublicTags] = useState<FeedbackTagSummary[]>([]);
+    const [internalTags, setInternalTags] = useState<FeedbackTagSummary[]>([]);
+    const [developerTags, setDeveloperTags] = useState<FeedbackTagSummary[]>([]);
+    const [progressTag, setProgressTag] = useState<FeedbackTagSummary | null>(null);
 
     const loadMeta = () => {
         if (!open || !tid) return;
@@ -65,15 +75,27 @@ export const FeedbackMetaEditModal: React.FC<FeedbackMetaEditModalProps> = ({
             method: 'GET',
             data: { tid },
             setData: (data: {
-                tag?: string;
                 type?: 'SUGGESTION' | 'BUG';
                 subscriptions?: string[];
+                publicTags?: FeedbackTagSummary[];
+                internalTags?: FeedbackTagSummary[];
+                developerTags?: FeedbackTagSummary[];
+                progressTag?: FeedbackTagSummary | null;
             }) => {
-                setTagInput(data?.tag ?? '');
                 setTypeValue(data?.type ?? 'SUGGESTION');
                 const list = data?.subscriptions ?? [];
                 setSubscriptionsList(list);
                 lastSavedSubsRef.current = JSON.stringify(list);
+                const nextPublicTags = data?.publicTags ?? [];
+                const nextInternalTags = data?.internalTags ?? [];
+                const nextDeveloperTags = data?.developerTags ?? [];
+                setPublicTags(nextPublicTags);
+                setInternalTags(nextInternalTags);
+                setDeveloperTags(nextDeveloperTags);
+                setPublicTagIds(nextPublicTags.map(tag => tag.id));
+                setInternalTagIds(nextInternalTags.map(tag => tag.id));
+                setDeveloperTagIds(nextDeveloperTags.map(tag => tag.id));
+                setProgressTag(data?.progressTag ?? null);
             },
         })
             .catch(() => messageApi.error(gLang('admin.feedbackMetaLoadFailed')))
@@ -177,13 +199,27 @@ export const FeedbackMetaEditModal: React.FC<FeedbackMetaEditModalProps> = ({
     const handleSaveTag = async () => {
         setTagSaving(true);
         try {
-            await submitData({
-                url: '/feedback/tag',
+            await fetchData({
+                url: '/feedback/admin/tags/set',
                 method: 'POST',
-                data: { tid, tag: tagInput },
-                successMessage: 'feedback.tagSaved',
-                setIsFormDisabled: () => {},
-                setIsModalOpen: () => {},
+                data: { tid, publicTagIds, internalTagIds, developerTagIds },
+                setData: (data: {
+                    publicTags?: FeedbackTagSummary[];
+                    internalTags?: FeedbackTagSummary[];
+                    developerTags?: FeedbackTagSummary[];
+                    progressTag?: FeedbackTagSummary | null;
+                }) => {
+                    const nextPublicTags = data?.publicTags ?? [];
+                    const nextInternalTags = data?.internalTags ?? [];
+                    const nextDeveloperTags = data?.developerTags ?? [];
+                    setPublicTags(nextPublicTags);
+                    setInternalTags(nextInternalTags);
+                    setDeveloperTags(nextDeveloperTags);
+                    setPublicTagIds(nextPublicTags.map(tag => tag.id));
+                    setInternalTagIds(nextInternalTags.map(tag => tag.id));
+                    setDeveloperTagIds(nextDeveloperTags.map(tag => tag.id));
+                    setProgressTag(data?.progressTag ?? null);
+                },
             });
             onSaved?.();
         } finally {
@@ -265,28 +301,84 @@ export const FeedbackMetaEditModal: React.FC<FeedbackMetaEditModalProps> = ({
                             size="small"
                             title={gLang('feedback.tag')}
                             extra={
-                                <Space wrap>
-                                    <Input
-                                        value={tagInput}
-                                        onChange={e => setTagInput(e.target.value)}
-                                        placeholder={gLang('feedback.tagPlaceholder')}
-                                        style={{ width: 160, height: 28 }}
-                                        maxLength={64}
-                                    />
-                                    <Button
-                                        type="primary"
-                                        loading={tagSaving}
-                                        onClick={handleSaveTag}
-                                        style={{ height: 28, boxShadow: 'none' }}
-                                    >
-                                        <SaveOutlined style={{ fontSize: 16 }} />
-                                    </Button>
-                                </Space>
+                                <Button
+                                    type="primary"
+                                    loading={tagSaving}
+                                    onClick={handleSaveTag}
+                                    style={{ boxShadow: 'none' }}
+                                >
+                                    {gLang('feedback.saveTag')}
+                                </Button>
                             }
-                            style={{ boxShadow: 'none' }}
-                            headStyle={{ borderBottom: 'none' }}
-                            bodyStyle={{ padding: 0, height: 0 }}
-                        />
+                        >
+                            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                                <div>
+                                    <Typography.Text
+                                        strong
+                                        style={{ display: 'block', marginBottom: 8 }}
+                                    >
+                                        {gLang('feedback.publicTag')}
+                                    </Typography.Text>
+                                    <FeedbackTagSelect
+                                        admin
+                                        allowCreate
+                                        scope="PUBLIC"
+                                        value={publicTagIds}
+                                        onChange={setPublicTagIds}
+                                        selectedTags={publicTags}
+                                        placeholder={gLang('feedback.selectOrCreatePublicTag')}
+                                        style={{ width: '100%' }}
+                                    />
+                                </div>
+                                <div>
+                                    <Typography.Text
+                                        strong
+                                        style={{ display: 'block', marginBottom: 8 }}
+                                    >
+                                        {gLang('feedback.internalTag')}
+                                    </Typography.Text>
+                                    <FeedbackTagSelect
+                                        admin
+                                        allowCreate
+                                        scope="INTERNAL"
+                                        value={internalTagIds}
+                                        onChange={setInternalTagIds}
+                                        selectedTags={internalTags}
+                                        placeholder={gLang('feedback.selectOrCreateInternalTag')}
+                                        style={{ width: '100%' }}
+                                    />
+                                </div>
+                                <div>
+                                    <Typography.Text
+                                        strong
+                                        style={{ display: 'block', marginBottom: 8 }}
+                                    >
+                                        {gLang('feedback.developerTag')}
+                                    </Typography.Text>
+                                    <FeedbackTagSelect
+                                        admin
+                                        allowCreate
+                                        scope="DEVELOPER"
+                                        value={developerTagIds}
+                                        onChange={setDeveloperTagIds}
+                                        selectedTags={developerTags}
+                                        placeholder={gLang('feedback.selectOrCreateDeveloperTag')}
+                                        style={{ width: '100%' }}
+                                    />
+                                </div>
+                            </Space>
+                        </Card>
+                        <Card size="small" title={gLang('admin.feedbackDevProgress')}>
+                            <FeedbackProgressSelect
+                                tid={tid}
+                                value={progressTag}
+                                onChanged={(newTag, oldTag) => {
+                                    setProgressTag(newTag);
+                                    onSaved?.();
+                                    onProgressChanged?.(newTag, oldTag);
+                                }}
+                            />
+                        </Card>
                         <Card size="small" title={gLang('feedback.subscriptions')}>
                             <Space direction="vertical" style={{ width: '100%' }} size="small">
                                 <Space.Compact style={{ width: '100%' }}>

@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Modal, Input, Space, Spin, Button, App, Grid, Segmented } from 'antd';
+import { Modal, Input, Spin, Button, App, Grid, Segmented, Form } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import axiosInstance from '@common/axiosConfig';
 import { gLang } from '@common/language';
@@ -158,24 +158,42 @@ export const FeedbackDetailEditModal: React.FC<FeedbackDetailEditModalProps> = (
                 title={modalTitle}
                 open={open}
                 onCancel={onClose}
-                footer={null}
-                width={560}
+                footer={[
+                    <Button key="cancel" onClick={onClose} disabled={saving}>
+                        {gLang('common.cancel')}
+                    </Button>,
+                    <Button
+                        key="save"
+                        type="primary"
+                        onClick={handleSave}
+                        loading={saving}
+                        disabled={loading}
+                    >
+                        {gLang('common.save')}
+                    </Button>,
+                ]}
+                width={600}
                 destroyOnClose
                 style={{ borderRadius: 8 }}
+                styles={{
+                    body: {
+                        padding: '16px 16px 0 8px',
+                    },
+                    footer: {
+                        padding: '12px 16px 16px',
+                    },
+                }}
             >
                 <Spin spinning={loading}>
-                    <Space direction="vertical" size={16} style={{ width: '100%', marginTop: 16 }}>
-                        {/* {operator ? (
-                            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 16 }}>
-                                <Button type="link" size="small" onClick={() => setPunishmentModalOpen(true)}>
-                                    {gLang('openidPanel.modaltitle')}
-                                </Button>
-                            </div>
-                        ) : null} */}
-                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-                            <span style={{ width: 60, marginRight: 16, textAlign: 'right' }}>
-                                {gLang('feedback.messageType')}
-                            </span>
+                    <Form
+                        layout="horizontal"
+                        colon={false}
+                        labelAlign="right"
+                        labelCol={{ flex: '64px' }}
+                        wrapperCol={{ flex: 1 }}
+                        style={{ paddingTop: 4 }}
+                    >
+                        <Form.Item label={gLang('feedback.messageType')} style={{ marginBottom: 20 }}>
                             <Segmented
                                 value={featured ? 'featured' : 'normal'}
                                 onChange={val => setFeatured(val === 'featured')}
@@ -184,11 +202,8 @@ export const FeedbackDetailEditModal: React.FC<FeedbackDetailEditModalProps> = (
                                     { value: 'featured', label: gLang('feedback.featured') },
                                 ]}
                             />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-                            <span style={{ width: 60, marginRight: 16, textAlign: 'right' }}>
-                                {gLang('feedback.visibility')}
-                            </span>
+                        </Form.Item>
+                        <Form.Item label={gLang('feedback.visibility')} style={{ marginBottom: 20 }}>
                             <Segmented
                                 value={onlyDisplayToPoster ? 'poster' : 'all'}
                                 onChange={val => setOnlyDisplayToPoster(val === 'poster')}
@@ -198,11 +213,8 @@ export const FeedbackDetailEditModal: React.FC<FeedbackDetailEditModalProps> = (
                                 ]}
                                 disabled={!operator}
                             />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-                            <span style={{ width: 60, marginRight: 16, textAlign: 'right' }}>
-                                {gLang('feedback.action')}
-                            </span>
+                        </Form.Item>
+                        <Form.Item label={gLang('feedback.action')} style={{ marginBottom: 20 }}>
                             <Segmented
                                 value={action}
                                 onChange={setAction}
@@ -217,48 +229,26 @@ export const FeedbackDetailEditModal: React.FC<FeedbackDetailEditModalProps> = (
                                     },
                                 ]}
                             />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-                            <span style={{ width: 60, marginRight: 16, textAlign: 'right' }}>
-                                {gLang('feedback.displayName')}
-                            </span>
+                        </Form.Item>
+                        <Form.Item
+                            label={gLang('feedback.displayName')}
+                            style={{ marginBottom: 20 }}
+                        >
                             <Input
                                 value={displayTitle}
                                 onChange={e => setDisplayTitle(e.target.value)}
                                 placeholder={gLang('feedback.displayName')}
-                                style={{ flex: 1, maxWidth: 400 }}
                             />
-                        </div>
-                        <div style={{ display: 'flex', marginBottom: 16 }}>
-                            <span
-                                style={{
-                                    width: 60,
-                                    marginRight: 16,
-                                    textAlign: 'right',
-                                    verticalAlign: 'top',
-                                }}
-                            >
-                                {gLang('feedback.content')}
-                            </span>
+                        </Form.Item>
+                        <Form.Item label={gLang('feedback.content')} style={{ marginBottom: 0 }}>
                             <Input.TextArea
                                 value={content}
                                 onChange={e => setContent(e.target.value)}
                                 placeholder={gLang('feedback.content')}
                                 rows={6}
-                                style={{ flex: 1, maxWidth: 500 }}
                             />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <Button
-                                type="primary"
-                                onClick={handleSave}
-                                loading={saving}
-                                disabled={loading}
-                            >
-                                {gLang('common.save')}
-                            </Button>
-                        </div>
-                    </Space>
+                        </Form.Item>
+                    </Form>
                 </Spin>
             </Modal>
             <PunishmentManagementModal

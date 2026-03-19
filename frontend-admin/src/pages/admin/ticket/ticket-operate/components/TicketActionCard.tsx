@@ -70,6 +70,7 @@ interface TicketActionCardProps {
     returnToMy: boolean;
     toLink: string;
     tid?: string;
+    onActionComplete?: () => void;
 }
 
 export const TicketActionCard = React.memo(
@@ -84,6 +85,7 @@ export const TicketActionCard = React.memo(
         returnToMy,
         toLink,
         tid,
+        onActionComplete,
     }: TicketActionCardProps) => {
         // 移除userList状态和相关的useEffect
         const [showEntrustModal, setShowEntrustModal] = useState(false);
@@ -235,7 +237,11 @@ export const TicketActionCard = React.memo(
                                             );
                                             notifyTicketCountUpdate();
 
+                                            if (onActionComplete) {
+                                            onActionComplete();
+                                        } else {
                                             navigate(returnToMy ? '/ticket/my' : toLink);
+                                        }
                                         }
                                     }}
                                 >
@@ -357,7 +363,11 @@ export const TicketActionCard = React.memo(
                                             );
                                             notifyTicketCountUpdate();
 
+                                            if (onActionComplete) {
+                                            onActionComplete();
+                                        } else {
                                             navigate(returnToMy ? '/ticket/my' : toLink);
+                                        }
                                         }
                                     }}
                                 >
@@ -431,7 +441,11 @@ export const TicketActionCard = React.memo(
                                         ); // 升级后重新等待分配
                                         notifyTicketCountUpdate();
 
-                                        navigate(returnToMy ? '/ticket/my' : toLink);
+                                        if (onActionComplete) {
+                                            onActionComplete();
+                                        } else {
+                                            navigate(returnToMy ? '/ticket/my' : toLink);
+                                        }
                                     }
                                 }}
                             >

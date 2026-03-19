@@ -20,6 +20,7 @@ import {
     BanTab,
     PlayerActionTab,
     RecordingTab,
+    GamelogTab,
     TicketTab,
     LoginTab,
     ChatTab,
@@ -326,6 +327,19 @@ const SuperPanelPlayerComponent = ({
                     spinningRecoding={spinningRecoding}
                     timeRange={recordingTimeRange}
                     onTimeRangeChange={handleRecordingTimeRangeChange}
+                    onViewOverwatch={recordId => {
+                        setOverwatchRecordId(recordId);
+                        setOverwatchModalVisible(true);
+                    }}
+                />
+            ),
+        },
+        {
+            key: 'gamelog',
+            label: gLang('superPanel.tab.gamelog'),
+            children: (
+                <GamelogTab
+                    ecid={ecid}
                     onViewOverwatch={recordId => {
                         setOverwatchRecordId(recordId);
                         setOverwatchModalVisible(true);

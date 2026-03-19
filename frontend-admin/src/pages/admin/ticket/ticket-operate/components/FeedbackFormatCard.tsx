@@ -1,13 +1,29 @@
-// FB (Feedback/GU) ticket only: switch + open manage panel; when feedback format on, show FeedbackContent below card and official reply form.
+// FB (Feedback/GU) 工单工具卡：顶部保留视图切换与 Jira 入口，元信息编辑区常驻展开，反馈线程与官方回复区在下方。
 
 import React, { useState, useRef, useMemo, useLayoutEffect, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Button, Space, Form, theme, Spin, message, Select, Input, Segmented } from 'antd';
+import {
+    Card,
+    Button,
+    Space,
+    Form,
+    theme,
+    Spin,
+    message,
+    Select,
+    Input,
+    Segmented,
+    Modal,
+    Tooltip,
+} from 'antd';
 import {
     MessageOutlined,
     SendOutlined,
+    LinkOutlined,
     SettingOutlined,
-    UnorderedListOutlined,
+    ArrowLeftOutlined,
+    LockOutlined,
+    ReloadOutlined,
 } from '@ant-design/icons';
 import axiosInstance, { fetchData, submitData } from '@common/axiosConfig';
 import { Ticket, TicketType, Feedback } from '@ecuc/shared/types/ticket.types';
@@ -25,9 +41,12 @@ import { TicketStatus } from '@ecuc/shared/types/ticket.types';
 import MarkdownEditor from '@common/components/MarkdownEditor/MarkdownEditor';
 import Upload from 'antd/es/upload';
 import { UploadOutlined } from '@ant-design/icons';
-import { FeedbackMetaEditModal } from './FeedbackMetaEditModal';
 import { FeedbackDetailEditModal } from './FeedbackDetailEditModal';
 import FeedbackContent from '@common/components/Feedback/FeedbackContent';
+import FeedbackJiraCard from './FeedbackJiraCard';
+import { AIPolishButton, type AIPolishButtonRef } from './AIPolishButton';
+import FeedbackMetaPanel from './FeedbackMetaPanel';
+import FeedbackAdvancedSettingsModal from './FeedbackAdvancedSettingsModal';
 
 const STORAGE_KEY_REPLY_IDENTITY = 'feedback_official_reply_identity';
 const STORAGE_KEY_REPLY_IDENTITY_OTHER = 'feedback_official_reply_identity_other';
@@ -79,6 +98,7 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
     feedbackFormatEnabled,
     setFeedbackFormatEnabled,
 }) => {
+    const isDesktop = isPC();
     const navigate = useNavigate();
     const { user } = useAuth();
     const isDarkMode = useDarkMode();
@@ -89,31 +109,24 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
     const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
     const [isUploading, setIsUploading] = useState(false);
     const [replyingToDetailId, setReplyingToDetailId] = useState<number | null>(null);
-    const [managePanelOpen, setManagePanelOpen] = useState(false);
+    const [jiraModalOpen, setJiraModalOpen] = useState(false);
+    const [advancedModalOpen, setAdvancedModalOpen] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     const [filterType, setFilterType] = useState<'all' | 'official'>('all');
+    const [replyAsNote, setReplyAsNote] = useState(false);
     const [replyIdentity, setReplyIdentityState] =
         useState<ReplyIdentityType>(loadStoredReplyIdentity);
     const [replyIdentityOther, setReplyIdentityOtherState] = useState(loadStoredReplyIdentityOther);
     const [messageApi, contextHolder] = message.useMessage();
-    const hasShownHint = useRef(false);
+    const replyFormRef = useRef<HTMLDivElement>(null);
+    const aiPolishRef = useRef<AIPolishButtonRef>(null);
+    const [placeholderOverride, setPlaceholderOverride] = useState<string | null>(null);
 
     const setReplyIdentity = useCallback((v: ReplyIdentityType) => {
         setReplyIdentityState(v);
         localStorage.setItem(STORAGE_KEY_REPLY_IDENTITY, v);
     }, []);
 
-    // 初次进入页面时显示当前视图提示
-    React.useEffect(() => {
-        // 使用ref确保只显示一次
-        if (!hasShownHint.current) {
-            if (feedbackFormatEnabled) {
-                messageApi.info(gLang('ticketOperate.feedbackFormat.feedback'));
-            } else {
-                messageApi.info(gLang('ticketOperate.feedbackFormat.normal'));
-            }
-            hasShownHint.current = true;
-        }
-    }, [feedbackFormatEnabled]);
     const setReplyIdentityOther = useCallback((v: string) => {
         setReplyIdentityOtherState(v);
         localStorage.setItem(STORAGE_KEY_REPLY_IDENTITY_OTHER, v);
@@ -151,6 +164,16 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
             })
             .finally(() => setFeedbackDetailLoading(false));
     }, [ticket?.tid, ticket?.type]);
+
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await (onRefresh?.() as unknown as Promise<void>);
+            loadFeedbackDetail();
+        } finally {
+            setRefreshing(false);
+        }
+    }, [onRefresh, loadFeedbackDetail]);
 
     useEffect(() => {
         if (feedbackFormatEnabled && ticket?.tid && ticket?.type === TicketType.Feedback) {
@@ -223,7 +246,9 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
     const feedbackTicket: Feedback = useMemo(() => {
         const src = feedbackDetail ?? ticket;
         const t = src as Ticket & {
-            tag?: string;
+            publicTags?: Feedback['publicTags'];
+            internalTags?: Feedback['internalTags'];
+            progressTag?: Feedback['progressTag'];
             feedbackType?: 'SUGGESTION' | 'BUG';
             lastReplyTime?: string | null;
             replyCount?: number;
@@ -232,7 +257,9 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
         return {
             ...t,
             details,
-            tag: t.tag ?? '',
+            publicTags: t.publicTags ?? [],
+            internalTags: t.internalTags ?? [],
+            progressTag: t.progressTag ?? null,
             feedbackType: t.feedbackType ?? 'SUGGESTION',
             lastReplyTime: t.lastReplyTime ?? null,
             replyCount: t.replyCount ?? t.details?.length ?? 0,
@@ -243,17 +270,10 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
         if (feedbackFormatEnabled) cardIndexRef.current = 0;
     }, [feedbackFormatEnabled, ticket?.tid]);
 
-    const handleOpenManagePanel = () => {
-        if (ticket?.tid) setManagePanelOpen(true);
-    };
-    const handleCloseManagePanel = () => {
-        setManagePanelOpen(false);
-        onRefresh?.();
-    };
-
     const handleReply = async (values: { details?: string }) => {
         const tid = ticket?.tid;
         if (!tid || !values.details?.trim()) return;
+
         const identityStr =
             replyIdentity === 'other'
                 ? replyIdentityOther.trim() || getReplyIdentityLabel('other')
@@ -264,6 +284,7 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
             files: string[];
             parent_detail_id?: number;
             identity: string;
+            type?: 'note';
         } = {
             tid,
             details: values.details.trim(),
@@ -271,6 +292,7 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
             identity: identityStr,
         };
         if (replyingToDetailId != null) body.parent_detail_id = replyingToDetailId;
+        if (replyAsNote) body.type = 'note';
         await submitData({
             data: body,
             url: '/feedback/admin/reply',
@@ -307,20 +329,31 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
         setDetailEditModalOpen(true);
     };
 
+    const handleProgressChanged = useCallback(
+        (newTag: { name: string } | null, oldTag: { name: string } | null) => {
+            onRefresh?.();
+            loadFeedbackDetail();
+            // 滚动到回复区域并自动触发 AI 润色
+            const noneLabel = gLang('admin.feedbackProgressNone');
+            const oldName = oldTag?.name ?? noneLabel;
+            const newName = newTag?.name ?? noneLabel;
+            const text = gLang('admin.feedbackProgressNotice', { oldName, newName });
+            setTimeout(() => {
+                replyFormRef.current?.scrollIntoView({ behavior: 'auto' });
+                setTimeout(() => {
+                    aiPolishRef.current?.polishText(text);
+                }, 400);
+            }, 100);
+        },
+        [onRefresh]
+    );
+
+    const mobileContainerStyle: React.CSSProperties = {};
+
     return (
-        <>
+        <div style={mobileContainerStyle}>
             {uploadContextHolder}
             {contextHolder}
-            <FeedbackMetaEditModal
-                open={managePanelOpen}
-                tid={ticket.tid}
-                currentStatus={ticket.status}
-                onClose={handleCloseManagePanel}
-                onSaved={() => {
-                    onRefresh?.();
-                    loadFeedbackDetail();
-                }}
-            />
             <FeedbackDetailEditModal
                 open={detailEditModalOpen}
                 detailId={detailEditId}
@@ -333,86 +366,134 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
                     onRefresh?.();
                 }}
             />
-            {isPC() ? (
-                <Card
-                    size="small"
-                    title={
-                        <Space>
-                            <MessageOutlined />
-                            <span>{gLang('ticketOperate.cardNav.feedbackFormat')}</span>
-                        </Space>
-                    }
-                    extra={
-                        <Space wrap size="small" style={{ alignItems: 'center', gap: 12 }}>
+            <Card
+                size="small"
+                title={
+                    !isDesktop ? (
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                flexWrap: 'wrap',
+                            }}
+                        >
                             <Button
                                 size="small"
-                                icon={<UnorderedListOutlined />}
+                                icon={<ArrowLeftOutlined />}
                                 onClick={() => navigate('/feedback')}
                                 style={{
                                     height: 24,
+                                    paddingInline: 8,
                                     border: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
+                                    borderRadius: 8,
                                 }}
                                 type="default"
                             >
-                                {gLang('ticketOperate.feedbackFormat.backToFeedbackList')}
+                                {gLang('common.back')}
                             </Button>
                             <Button
-                                type="primary"
+                                size="small"
+                                icon={<LinkOutlined />}
+                                onClick={() => setJiraModalOpen(true)}
+                                style={{
+                                    height: 24,
+                                    paddingInline: 8,
+                                    border: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
+                                    borderRadius: 8,
+                                }}
+                                type="default"
+                            >
+                                {gLang('feedback.jira.button')}
+                            </Button>
+                            <Button
                                 size="small"
                                 icon={<SettingOutlined />}
-                                onClick={handleOpenManagePanel}
+                                onClick={() => setAdvancedModalOpen(true)}
                                 style={{
-                                    borderRadius: 6,
                                     height: 24,
+                                    paddingInline: 8,
+                                    border: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
+                                    borderRadius: 8,
                                 }}
+                                type="default"
                             >
-                                {gLang('ticketOperate.feedbackFormat.openManagePanel')}
+                                {gLang('feedback.settings')}
                             </Button>
-                            <Segmented
-                                value={feedbackFormatEnabled}
-                                onChange={setFeedbackFormatEnabled}
-                                options={[
-                                    {
-                                        label: gLang('ticketOperate.feedbackFormat.normalStyle'),
-                                        value: false,
-                                    },
-                                    {
-                                        label: gLang('ticketOperate.feedbackFormat.feedbackStyle'),
-                                        value: true,
-                                    },
-                                ]}
+                            <Button
                                 size="small"
-                                style={{ borderRadius: 6 }}
+                                icon={<ReloadOutlined />}
+                                loading={refreshing}
+                                onClick={handleRefresh}
+                                style={{
+                                    height: 24,
+                                    paddingInline: 8,
+                                    border: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
+                                    borderRadius: 8,
+                                }}
+                                type="default"
                             />
-                        </Space>
-                    }
-                    style={{
-                        background: isDarkMode ? '#141414' : '#ffffff',
-                        borderRadius: 8,
-                        border: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
-                        boxShadow: 'none',
-                        marginBottom: 8,
-                    }}
-                    bodyStyle={{
-                        padding: 0,
-                        height: 0,
-                        border: 'none',
-                    }}
-                    bordered={false}
-                    headStyle={{
-                        borderBottom: 'none',
-                    }}
-                ></Card>
-            ) : (
-                <Card
-                    size="small"
-                    title={
-                        <Space>
-                            <MessageOutlined />
-                            <span>{gLang('ticketOperate.cardNav.feedbackFormat')}</span>
-                        </Space>
-                    }
-                    extra={
+                        </div>
+                    ) : (
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                flexWrap: 'wrap',
+                            }}
+                        >
+                            <Button
+                                size="small"
+                                icon={<LinkOutlined />}
+                                onClick={() => setJiraModalOpen(true)}
+                                style={{
+                                    height: 28,
+                                    border: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
+                                    borderRadius: 8,
+                                }}
+                                type="default"
+                            >
+                                {gLang('feedback.jira.button')}
+                            </Button>
+                            <Button
+                                size="small"
+                                icon={<SettingOutlined />}
+                                onClick={() => setAdvancedModalOpen(true)}
+                                style={{
+                                    height: 28,
+                                    border: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
+                                    borderRadius: 8,
+                                }}
+                                type="default"
+                            >
+                                {gLang('feedback.settings')}
+                            </Button>
+                            <Button
+                                size="small"
+                                icon={<ReloadOutlined />}
+                                loading={refreshing}
+                                onClick={handleRefresh}
+                                style={{
+                                    height: 28,
+                                    border: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
+                                    borderRadius: 8,
+                                }}
+                                type="default"
+                            />
+                        </div>
+                    )
+                }
+                extra={
+                    <div
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0,
+                            maxWidth: isDesktop ? undefined : 150,
+                            overflowX: 'auto',
+                        }}
+                    >
                         <Segmented
                             value={feedbackFormatEnabled}
                             onChange={setFeedbackFormatEnabled}
@@ -429,52 +510,60 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
                             size="small"
                             style={{ borderRadius: 6 }}
                         />
-                    }
-                    style={{
-                        background: isDarkMode ? '#141414' : '#ffffff',
-                        borderRadius: 8,
-                        border: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
-                        marginBottom: 8,
-                    }}
-                    bodyStyle={{
-                        padding: 16,
-                    }}
-                >
-                    {/* 操作区域 */}
-                    <div style={{ display: 'flex', width: '100%', gap: 8 }}>
-                        <Button
-                            size="small"
-                            icon={<UnorderedListOutlined />}
-                            onClick={() => navigate('/feedback')}
-                            style={{
-                                flex: 1,
-                                height: 24,
-                                border: `1px solid ${isDarkMode ? '#303030' : '#d9d9d9'}`,
-                            }}
-                            type="default"
-                        >
-                            {gLang('ticketOperate.feedbackFormat.backToFeedbackList')}
-                        </Button>
-                        <Button
-                            type="primary"
-                            size="small"
-                            icon={<SettingOutlined />}
-                            onClick={handleOpenManagePanel}
-                            style={{
-                                flex: 1,
-                                borderRadius: 6,
-                                height: 24,
-                            }}
-                        >
-                            {gLang('ticketOperate.feedbackFormat.openManagePanel')}
-                        </Button>
                     </div>
-                </Card>
-            )}
+                }
+                style={{
+                    background: isDarkMode ? '#141414' : '#ffffff',
+                    borderRadius: 8,
+                    border: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
+                    marginBottom: 8,
+                    boxShadow: 'none',
+                }}
+                styles={{
+                    header: {
+                        padding: isDesktop ? '10px 16px' : '8px 12px',
+                        borderBottom: 'none',
+                    },
+                    body: {
+                        padding: isDesktop ? '12px 16px 14px' : '12px',
+                    },
+                }}
+            >
+                <Space direction="vertical" style={{ width: '100%' }} size={isDesktop ? 2 : 0}>
+                    <FeedbackMetaPanel
+                        tid={ticket.tid}
+                        currentStatus={ticket.status}
+                        onSaved={() => {
+                            onRefresh?.();
+                            loadFeedbackDetail();
+                        }}
+                        onProgressChanged={handleProgressChanged}
+                        compact
+                    />
+                </Space>
+            </Card>
+            <Modal
+                open={jiraModalOpen}
+                title={gLang('feedback.jira.title')}
+                onCancel={() => setJiraModalOpen(false)}
+                footer={null}
+                width={900}
+                destroyOnClose
+            >
+                <FeedbackJiraCard tid={ticket.tid} displayMode="embedded" />
+            </Modal>
+            <FeedbackAdvancedSettingsModal
+                open={advancedModalOpen}
+                tid={ticket.tid}
+                onClose={() => setAdvancedModalOpen(false)}
+                onSaved={() => {
+                    onRefresh?.();
+                    loadFeedbackDetail();
+                }}
+            />
             {feedbackFormatEnabled && (
                 <Space direction="vertical" style={{ width: '100%' }} size={8}>
                     <Spin spinning={feedbackDetailLoading}>
-                        {/* Only render thread when feedbackDetail is set so details have correct operator (e.g. 优雅) from GET /feedback/detail; avoid showing parent ticket.details which may lack it */}
                         {feedbackDetail != null ? (
                             <FeedbackContent
                                 ticket={feedbackTicket}
@@ -489,12 +578,13 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
                                 isFormDisabled={isFormDisabled}
                                 onSetFeatured={handleSetFeatured}
                                 onEditDetail={handleEditDetail}
-                                animationDelay={0.02}
+                                animationDelay={0}
                                 cardIndex={cardIndexRef}
                                 subscribed={undefined}
                                 primaryOpenid={undefined}
                                 isUpdatingSubscription={false}
                                 onSubscriptionChange={(_openid: string, _checked: boolean) => {}}
+                                useAdminHtml
                             />
                         ) : (
                             <div
@@ -513,6 +603,7 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
                         )}
                     </Spin>
                     <Card
+                        ref={replyFormRef as any}
                         size="small"
                         style={{
                             background: isDarkMode ? '#141414' : '#ffffff',
@@ -526,7 +617,6 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
                                 {replyingToDetailId != null && (
                                     <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
                                         {(() => {
-                                            // 找到被回复的评论
                                             const allDetails = [...(feedbackTicket.details || [])];
                                             const repliedComment = allDetails.find(
                                                 d => d.id === replyingToDetailId
@@ -620,17 +710,39 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
                                 rules={[{ required: true, message: gLang('required') }]}
                             >
                                 <MarkdownEditor
-                                    placeholder={gLang('ticketDetail.additionIntro')}
+                                    placeholder={placeholderOverride || gLang('ticketDetail.additionIntro')}
                                     maxLength={2000}
                                     minRows={3}
                                     maxRows={5}
                                 />
                             </Form.Item>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                <AIPolishButton
+                                    ref={aiPolishRef}
+                                    tid={ticket?.tid?.toString()}
+                                    form={form}
+                                    setPlaceholderOverride={setPlaceholderOverride}
+                                />
+                                <Tooltip title={gLang('feedback.replyAsNoteTooltip')}>
+                                    <Button
+                                        size="small"
+                                        icon={<LockOutlined />}
+                                        type={replyAsNote ? 'primary' : 'default'}
+                                        onClick={() => {
+                                            setReplyAsNote(v => !v);
+                                            if (!replyAsNote) setReplyingToDetailId(null);
+                                        }}
+                                    >
+                                        {gLang('feedback.replyAsNote')}
+                                    </Button>
+                                </Tooltip>
+                            </div>
                             <Form.Item style={{ marginBottom: 0 }}>
                                 <div
                                     style={{
                                         display: 'flex',
                                         justifyContent: 'flex-start',
+                                        gap: 8,
                                     }}
                                 >
                                     <Button
@@ -639,13 +751,9 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
                                         disabled={isUploading || isFormDisabled}
                                         size="small"
                                         icon={<SendOutlined />}
-                                        style={{
-                                            height: 32,
-                                            padding: '0 16px',
-                                            marginRight: 8,
-                                        }}
+                                        style={{ height: 32, padding: '0 16px' }}
                                     >
-                                        {gLang('feedback.sendOfficialReply')}
+                                        {replyAsNote ? gLang('feedback.replyAsNote') : gLang('feedback.sendOfficialReply')}
                                     </Button>
                                     <Form.Item
                                         name="files"
@@ -654,7 +762,6 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
                                             Array.isArray(e) ? e : e?.fileList || []
                                         }
                                         noStyle
-                                        style={{ marginLeft: 8 }}
                                     >
                                         <Upload {...uploadProps}>
                                             <Button
@@ -676,6 +783,6 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
                     </Card>
                 </Space>
             )}
-        </>
+        </div>
     );
 };

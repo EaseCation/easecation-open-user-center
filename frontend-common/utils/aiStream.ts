@@ -96,12 +96,20 @@ function parseThinkingStep(thoughtResponse: string): ThinkingStep | null {
             failed: 'failed',
         };
 
+        // 兜底保证content始终为字符串，避免前端渲染阶段对trim()/JSON.parse调用时崩溃
+        const safeContent =
+            typeof content === 'string'
+                ? content
+                : content === undefined || content === null
+                  ? ''
+                  : JSON.stringify(cleanupContent(content));
+
         return {
             name: nodeInfo.nodeName || gLang('aiStream.processing'),
             status: statusMap[nodeInfo.nodeStatus] || 'executing',
             nodeType: nodeInfo.nodeType || 'unknown',
             execTime: nodeInfo.nodeExecTime || '0ms',
-            content: content,
+            content: safeContent,
             usages: nodeInfo.usages || [],
         };
     } catch {
@@ -342,6 +350,114 @@ export function callAIStreamWithCancel({
         promise,
         cancel: () => abortController.abort(),
     };
+}
+
+/**
+ * AI文案润色流式接口（轻量级，通用模型API格式）
+ */
+export interface AIPolishStreamOptions {
+    tid: number;
+    text: string;
+    onChunk: (chunk: string) => void;
+    onComplete?: (fullText: string) => void;
+    onError?: (error: Error) => void;
+}
+
+export function callAIPolishStreamWithCancel(options: AIPolishStreamOptions) {
+    const abortController = new AbortController();
+    const promise = callAIPolishStreamInternal({ ...options, signal: abortController.signal });
+    return { promise, cancel: () => abortController.abort() };
+}
+
+async function callAIPolishStreamInternal({
+    tid,
+    text,
+    onChunk,
+    onComplete,
+    onError,
+    signal,
+}: AIPolishStreamOptions & { signal: AbortSignal }): Promise<void> {
+    let fullText = '';
+
+    try {
+        const url = new URL('/ticket/aiPolish', BACKEND_DOMAIN);
+
+        const token = localStorage.getItem('jwt');
+        if (!token) {
+            throw new Error(gLang('aiStream.noAuthToken'));
+        }
+
+        const response = await fetch(url.toString(), {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                Accept: 'text/event-stream',
+                'Cache-Control': 'no-cache',
+            },
+            body: JSON.stringify({ tid, text }),
+            signal,
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        if (!response.body) {
+            throw new Error(gLang('aiStream.emptyBody'));
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        try {
+            while (true) {
+                if (signal.aborted) break;
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    const sseData = parseSSELine(line);
+                    if (sseData?.type !== 'data') continue;
+                    if (sseData.data === '[DONE]') {
+                        onComplete?.(fullText);
+                        return;
+                    }
+
+                    const trimmed = sseData.data.trim();
+                    if (!trimmed.startsWith('{')) continue;
+
+                    try {
+                        const json = JSON.parse(trimmed);
+                        // 通用模型API增量输出格式: output.text 为增量文本
+                        const chunk = json.output?.text || json.output?.choices?.[0]?.message?.content;
+                        if (chunk) {
+                            fullText += chunk;
+                            onChunk(chunk);
+                        }
+                        if (json.output?.finish_reason === 'stop') {
+                            onComplete?.(fullText);
+                            return;
+                        }
+                    } catch {
+                        // 跳过无法解析的行
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
+
+        onComplete?.(fullText);
+    } catch (error) {
+        if (signal.aborted) return;
+        onError?.(error as Error);
+    }
 }
 
 async function callAIStreamCancellable({

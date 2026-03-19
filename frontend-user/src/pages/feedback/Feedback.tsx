@@ -35,9 +35,12 @@ import { useTheme } from '@common/contexts/ThemeContext';
 import { useFeedbackFilters } from '@common/hooks/useFeedbackFilters';
 import { FeedbackListLayout } from '@common/components/FeedbackListLayout';
 import FeedbackSettingsModal from './components/FeedbackSettingsModal';
+import FeedbackTagSelect from '@common/components/Feedback/FeedbackTagSelect';
 
 const { useBreakpoint } = Grid;
 const { Text, Title } = Typography;
+
+const STORAGE_KEY = 'feedback-list-filters';
 
 const Feedback: React.FC = () => {
     usePageTitle();
@@ -49,16 +52,16 @@ const Feedback: React.FC = () => {
     const { getThemeColor } = useTheme();
 
     // 使用共享的筛选 Hook
-    const filters = useFeedbackFilters({ pageSize: 20 });
+    const filters = useFeedbackFilters({ pageSize: 20, storageKey: STORAGE_KEY });
     const {
-        filterTag,
+        publicTagIds,
         filterType,
         filterStatus,
         sortBy,
         order,
         page,
         pageSize,
-        setFilterTag,
+        setPublicTagIds,
         setFilterType,
         setFilterStatus,
         setSortBy,
@@ -70,7 +73,13 @@ const Feedback: React.FC = () => {
         undefined
     );
     const [total, setTotal] = useState(0);
-    const [searchValue, setSearchValue] = useState('');
+    const [searchValue, setSearchValue] = useState(() => {
+        try {
+            return sessionStorage.getItem(`${STORAGE_KEY}_keyword`) ?? '';
+        } catch {
+            return '';
+        }
+    });
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [isSpinning, setIsSpinning] = useState(true);
@@ -113,7 +122,7 @@ const Feedback: React.FC = () => {
                 sortBy?: 'createTime' | 'lastReplyTime' | 'heat';
                 order?: 'asc' | 'desc';
                 page?: number;
-                filterTag?: string;
+                publicTagIds?: number[];
                 filterType?: string;
                 filterStatus?: string;
                 /** 关键词搜索（服务端搜索全部数据后分页） */
@@ -127,13 +136,14 @@ const Feedback: React.FC = () => {
                 setIsListLoading(true);
             }
 
-            const params: Record<string, string | number | string[]> = {
+            const params: Record<string, string | number | string[] | number[]> = {
                 sortBy: overrides?.sortBy ?? sortBy,
                 order: overrides?.order ?? order,
                 page: String(overrides?.page ?? page),
                 pageSize: String(pageSize),
             };
-            const tag = overrides?.filterTag !== undefined ? overrides.filterTag : filterTag;
+            const nextPublicTagIds =
+                overrides?.publicTagIds !== undefined ? overrides.publicTagIds : publicTagIds;
             const type = overrides?.filterType !== undefined ? overrides.filterType : filterType;
             const status =
                 overrides?.filterStatus !== undefined ? overrides.filterStatus : filterStatus;
@@ -143,7 +153,8 @@ const Feedback: React.FC = () => {
                     ? overrides.keyword
                     : searchValue.trim() || undefined;
 
-            if (tag != null && tag !== '') params.tag = tag;
+            if (nextPublicTagIds != null && nextPublicTagIds.length > 0)
+                params.publicTagIds = nextPublicTagIds;
             if (type != null && type !== '') params.type = type;
             if (status != null && status !== '') params.status = status;
             if (keyword != null && keyword !== '') params.keyword = keyword;
@@ -163,7 +174,7 @@ const Feedback: React.FC = () => {
                 setIsListLoading(false);
             });
         },
-        [sortBy, order, page, filterTag, filterType, filterStatus, pageSize, searchValue]
+        [sortBy, order, page, publicTagIds, filterType, filterStatus, pageSize, searchValue]
     );
 
     // 搜索关键词防抖：输入后 300ms 请求服务端搜索全部数据（跳过首次挂载，避免与 loadList(true) 重复）
@@ -182,6 +193,14 @@ const Feedback: React.FC = () => {
         return () => {
             if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
         };
+    }, [searchValue]);
+
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(`${STORAGE_KEY}_keyword`, searchValue);
+        } catch {
+            // ignore
+        }
     }, [searchValue]);
 
     const loadExperienceData = () => {
@@ -395,13 +414,16 @@ const Feedback: React.FC = () => {
                                             }}
                                         >
                                             {gLang('feedback.filterOptions')}
-                                            {(filterType || filterStatus || filterTag) && (
+                                            {(filterType ||
+                                                filterStatus ||
+                                                (publicTagIds?.length ?? 0) > 0) && (
                                                 <Tag color="blue" style={{ marginLeft: 8 }}>
                                                     {
                                                         [
                                                             filterType,
                                                             filterStatus,
-                                                            filterTag,
+                                                            ...(publicTagIds?.map(() => 'tag') ??
+                                                                []),
                                                         ].filter(Boolean).length
                                                     }
                                                 </Tag>
@@ -614,17 +636,18 @@ const Feedback: React.FC = () => {
                                                     >
                                                         {gLang('feedback.tag')}
                                                     </Text>
-                                                    <Input
-                                                        placeholder={gLang(
-                                                            'feedback.tagPlaceholder'
-                                                        )}
-                                                        value={filterTag ?? ''}
-                                                        onChange={e =>
-                                                            setFilterTag(
-                                                                e.target.value || undefined
+                                                    <FeedbackTagSelect
+                                                        scope="PUBLIC"
+                                                        value={publicTagIds ?? []}
+                                                        onChange={value =>
+                                                            setPublicTagIds(
+                                                                value.length > 0 ? value : undefined
                                                             )
                                                         }
-                                                        allowClear
+                                                        placeholder={gLang(
+                                                            'feedback.filterPublicTagPlaceholder'
+                                                        )}
+                                                        style={{ width: '100%' }}
                                                     />
                                                 </div>
 
@@ -634,14 +657,14 @@ const Feedback: React.FC = () => {
                                                         onClick={() => {
                                                             setFilterType(undefined);
                                                             setFilterStatus(undefined);
-                                                            setFilterTag(undefined);
+                                                            setPublicTagIds(undefined);
                                                             setSortBy('createTime');
                                                             setOrder('desc');
                                                             setPage(1);
                                                             loadList(false, {
                                                                 filterType: undefined,
                                                                 filterStatus: undefined,
-                                                                filterTag: undefined,
+                                                                publicTagIds: undefined,
                                                                 sortBy: 'createTime',
                                                                 order: 'desc',
                                                                 page: 1,
@@ -798,19 +821,23 @@ const Feedback: React.FC = () => {
                                                 >
                                                     {gLang('feedback.tag')}
                                                 </Text>
-                                                <Input
-                                                    placeholder={gLang('feedback.tagPlaceholder')}
-                                                    value={filterTag ?? ''}
-                                                    onChange={e =>
-                                                        setFilterTag(e.target.value || undefined)
-                                                    }
-                                                    allowClear
-                                                    size="small"
-                                                    style={{ width: 140 }}
-                                                    onPressEnter={() => {
+                                                <FeedbackTagSelect
+                                                    scope="PUBLIC"
+                                                    value={publicTagIds ?? []}
+                                                    onChange={value => {
+                                                        const nextValue =
+                                                            value.length > 0 ? value : undefined;
+                                                        setPublicTagIds(nextValue);
                                                         setPage(1);
-                                                        loadList(false, { page: 1 });
+                                                        loadList(false, {
+                                                            publicTagIds: nextValue,
+                                                            page: 1,
+                                                        });
                                                     }}
+                                                    placeholder={gLang(
+                                                        'feedback.publicTagPlaceholder'
+                                                    )}
+                                                    style={{ width: 220 }}
                                                 />
                                             </div>
 
@@ -869,15 +896,15 @@ const Feedback: React.FC = () => {
                                                         setIsListLoading(true);
                                                         const params: Record<
                                                             string,
-                                                            string | number | string[]
+                                                            string | number | string[] | number[]
                                                         > = {
                                                             sortBy: newSortBy,
                                                             order,
                                                             page: '1',
                                                             pageSize: String(pageSize),
                                                         };
-                                                        if (filterTag != null && filterTag !== '')
-                                                            params.tag = filterTag;
+                                                        if (publicTagIds?.length)
+                                                            params.publicTagIds = publicTagIds;
                                                         if (filterType != null && filterType !== '')
                                                             params.type = filterType;
                                                         if (
@@ -948,15 +975,15 @@ const Feedback: React.FC = () => {
                                                     setIsListLoading(true);
                                                     const params: Record<
                                                         string,
-                                                        string | number | string[]
+                                                        string | number | string[] | number[]
                                                     > = {
                                                         sortBy,
                                                         order: newOrder,
                                                         page: '1',
                                                         pageSize: String(pageSize),
                                                     };
-                                                    if (filterTag != null && filterTag !== '')
-                                                        params.tag = filterTag;
+                                                    if (publicTagIds?.length)
+                                                        params.publicTagIds = publicTagIds;
                                                     if (filterType != null && filterType !== '')
                                                         params.type = filterType;
                                                     if (filterStatus != null && filterStatus !== '')

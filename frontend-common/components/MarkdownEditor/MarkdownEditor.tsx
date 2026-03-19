@@ -21,8 +21,13 @@ import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { gLang } from '../../language';
 import { useTheme } from '../../contexts/ThemeContext';
+import { TicketMentionDropdown, type UseTicketMentionResult } from '../TicketMention';
 
 const { TextArea } = Input;
+
+/** 将 #数字 转为 markdown 链接，用于预览模式 */
+const preprocessTicketRefs = (text: string): string =>
+    text.replace(/(^|\s)#(\d+)\b/g, (_, prefix, tid) => `${prefix}[#${tid}](/feedback/${tid})`);
 
 const previewStyles = (isDark: boolean) => ({
     wrap: {
@@ -88,12 +93,27 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     const [mode, setMode] = useState<'source' | 'preview'>('source');
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const textAreaRef = useRef<any>(null);
+    const mentionRef = useRef<UseTicketMentionResult | null>(null);
     const { isDark } = useTheme();
     const styles = previewStyles(isDark);
 
     const getTextArea = useCallback(() => {
         return textAreaRef.current?.resizableTextArea?.textArea as HTMLTextAreaElement | undefined;
     }, []);
+
+    const handleChange = useCallback(
+        (newValue: string) => onChange?.(newValue),
+        [onChange]
+    );
+
+    const handleKeyDown = useCallback(
+        (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+            mentionRef.current?.handleKeyDown(e);
+            if (e.defaultPrevented) return;
+            onKeyDown?.(e);
+        },
+        [onKeyDown]
+    );
 
     const applyAction = useCallback(
         (action: ToolbarAction) => {
@@ -190,6 +210,15 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         },
     ];
 
+    const mentionDropdown = (
+        <TicketMentionDropdown
+            getTextArea={getTextArea}
+            value={value}
+            onChange={handleChange}
+            mentionRef={mentionRef}
+        />
+    );
+
     return (
         <div style={style}>
             {!advancedOpen ? (
@@ -217,8 +246,8 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                     <TextArea
                         ref={textAreaRef}
                         value={value}
-                        onChange={e => onChange?.(e.target.value || '')}
-                        onKeyDown={onKeyDown}
+                        onChange={e => handleChange(e.target.value || '')}
+                        onKeyDown={handleKeyDown}
                         placeholder={placeholder}
                         autoSize={{ minRows, maxRows }}
                         showCount={maxLength != null}
@@ -230,6 +259,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                             resize: 'none',
                         }}
                     />
+                    {mentionDropdown}
                 </>
             ) : (
                 <>
@@ -316,22 +346,25 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                         </div>
                     )}
                     {mode === 'source' ? (
-                        <TextArea
-                            ref={textAreaRef}
-                            value={value}
-                            onChange={e => onChange?.(e.target.value || '')}
-                            onKeyDown={onKeyDown}
-                            placeholder={placeholder}
-                            autoSize={{ minRows, maxRows }}
-                            showCount={maxLength != null}
-                            maxLength={maxLength}
-                            disabled={disabled}
-                            style={{
-                                borderRadius: 8,
-                                borderColor: isDark ? '#434343' : '#e8e8e8',
-                                resize: 'none',
-                            }}
-                        />
+                        <>
+                            <TextArea
+                                ref={textAreaRef}
+                                value={value}
+                                onChange={e => handleChange(e.target.value || '')}
+                                onKeyDown={handleKeyDown}
+                                placeholder={placeholder}
+                                autoSize={{ minRows, maxRows }}
+                                showCount={maxLength != null}
+                                maxLength={maxLength}
+                                disabled={disabled}
+                                style={{
+                                    borderRadius: 8,
+                                    borderColor: isDark ? '#434343' : '#e8e8e8',
+                                    resize: 'none',
+                                }}
+                            />
+                            {mentionDropdown}
+                        </>
                     ) : (
                         <div style={styles.wrap}>
                             <div style={styles.base}>
@@ -362,7 +395,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                                         ),
                                     }}
                                 >
-                                    {value || ''}
+                                    {preprocessTicketRefs(value || '')}
                                 </ReactMarkdown>
                             </div>
                         </div>

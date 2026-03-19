@@ -264,12 +264,21 @@ const ShareTicketButtons: React.FC<ShareTicketButtonsProps> = ({
         }
     };
 
+    const handleCopyFeedbackLink = async () => {
+        if (!ticket?.tid) {
+            messageApi.error(gLang('admin.shareLinkIncomplete'));
+            return;
+        }
+        const url = `${window.location.origin}/feedback/table/${ticket.tid}`;
+        await copyToClipboard(url, 'admin.shareFeedbackLinkCopied');
+    };
+
     // 复制到剪贴板的核心函数
-    const copyToClipboard = async (url: string): Promise<void> => {
+    const copyToClipboard = async (url: string, successMsgKey = 'admin.shareLinkCopied'): Promise<void> => {
         // 首先尝试现代 Clipboard API
         if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
             await navigator.clipboard.writeText(url);
-            messageApi.success(gLang('admin.shareLinkCopied'), 5);
+            messageApi.success(gLang(successMsgKey), 5);
             return;
         }
 
@@ -288,7 +297,7 @@ const ShareTicketButtons: React.FC<ShareTicketButtonsProps> = ({
             document.body.removeChild(input);
 
             if (copied) {
-                messageApi.success(gLang('admin.shareLinkCopied'), 5);
+                messageApi.success(gLang(successMsgKey), 5);
                 return;
             }
         } catch {
@@ -451,6 +460,15 @@ const ShareTicketButtons: React.FC<ShareTicketButtonsProps> = ({
                 >
                     {gLang('admin.shareSnapshotLink')}
                 </Button>
+                {ticket?.type === 'GU' && (
+                    <Button
+                        icon={<CopyOutlined />}
+                        onClick={handleCopyFeedbackLink}
+                        title={gLang('admin.shareFeedbackLink')}
+                    >
+                        {gLang('admin.shareFeedbackLink')}
+                    </Button>
+                )}
                 <TidJumpComponent type="default" />
             </Space>
         </>

@@ -1,6 +1,6 @@
 // 工单操作页中的回复工单组件
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Button, Card, Form, Skeleton, Space, Upload, Select } from 'antd';
 import {
     UploadOutlined,
@@ -14,7 +14,9 @@ import { useUploadProps } from '@common/utils/uploadUtils';
 import { gLang } from '@common/language';
 import { QuickMessages } from './QuickMessages';
 import { AIGenerateButton } from './AIGenerateButton';
+import { AIPolishButton } from './AIPolishButton';
 import TextArea from 'antd/es/input/TextArea';
+import { TicketMentionDropdown, type UseTicketMentionResult } from '@common/components/TicketMention';
 import axiosInstance from '@common/axiosConfig';
 import { StaffAlias } from '@ecuc/shared/types/staff.types';
 import { useAuth } from '@common/contexts/AuthContext';
@@ -53,6 +55,13 @@ export const TicketReplyForm = React.memo(
         const [aliases, setAliases] = useState<StaffAlias[]>([]);
         const [currentAliasId, setCurrentAliasId] = useState<number | null>(null);
         const [loadingAliases, setLoadingAliases] = useState(false);
+        const [placeholderOverride, setPlaceholderOverride] = useState<string | null>(null);
+        const textAreaRef = useRef<any>(null);
+        const mentionRef = useRef<UseTicketMentionResult | null>(null);
+        const getTextArea = useCallback(
+            () => textAreaRef.current?.resizableTextArea?.textArea as HTMLTextAreaElement | undefined,
+            []
+        );
 
         // 获取当前用户的别名列表
         useEffect(() => {
@@ -153,6 +162,7 @@ export const TicketReplyForm = React.memo(
         );
         const returnToMyVal = Form.useWatch('returnToMy', form);
         const replyTypeVal = Form.useWatch('type', form);
+        const detailsVal: string = Form.useWatch('details', form) ?? '';
         // 标题点击切换类型
         const handleTitleClick = () => {
             const currentType = form.getFieldValue('type');
@@ -283,14 +293,32 @@ export const TicketReplyForm = React.memo(
                                     wrapperCol={{ span: 24 }}
                                 >
                                     <TextArea
+                                        ref={textAreaRef}
                                         autoSize={{ minRows: 2, maxRows: 32 }}
+                                        placeholder={placeholderOverride || undefined}
                                         onKeyDown={e => {
+                                            mentionRef.current?.handleKeyDown(e);
+                                            if (e.defaultPrevented) return;
                                             if (e.ctrlKey && e.key === 'Enter') {
                                                 form.submit();
                                             }
                                         }}
                                     />
                                 </Form.Item>
+                                <TicketMentionDropdown
+                                    getTextArea={getTextArea}
+                                    value={detailsVal}
+                                    onChange={v => form.setFieldValue('details', v)}
+                                    mentionRef={mentionRef}
+                                />
+
+                                {/*AI润色*/}
+                                <AIPolishButton
+                                    tid={ticket?.tid?.toString()}
+                                    form={form}
+                                    setPlaceholderOverride={setPlaceholderOverride}
+                                    style={{ marginBottom: 8 }}
+                                />
 
                                 {/*快捷回复信息*/}
                                 <QuickMessages shortcuts={shortcuts} form={form} />

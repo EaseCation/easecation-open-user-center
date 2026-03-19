@@ -6,6 +6,7 @@ import Anchor from 'antd/es/anchor';
 import Button from 'antd/es/button';
 import { gLang } from '@common/language';
 import { MenuOutlined } from '@ant-design/icons';
+import useDarkMode from '@common/hooks/useDarkMode';
 
 const { Link: AnchorLink } = Anchor;
 
@@ -22,6 +23,7 @@ interface FeedbackAnchorMobileProps {
 const FeedbackAnchorMobile: React.FC<FeedbackAnchorMobileProps> = ({ officialReplies }) => {
     const [open, setOpen] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
+    const isDarkMode = useDarkMode();
 
     // 处理目录关闭，先触发关闭动画，动画结束后再真正关闭
     const handleClose = () => {
@@ -73,8 +75,9 @@ const FeedbackAnchorMobile: React.FC<FeedbackAnchorMobileProps> = ({ officialRep
                         top: 0,
                         bottom: 0,
                         width: '240px',
-                        background: 'white',
+                        background: isDarkMode ? '#141414' : '#ffffff',
                         boxShadow: '-2px 0 8px rgba(0, 0, 0, 0.15)',
+                        borderLeft: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
                         zIndex: 99,
                         animation: isClosing
                             ? 'slideOutRight 0.3s ease-in-out'
@@ -85,7 +88,17 @@ const FeedbackAnchorMobile: React.FC<FeedbackAnchorMobileProps> = ({ officialRep
                     <Card
                         title={gLang('feedback.officialReplyIndex')}
                         size="small"
-                        style={{ height: '100%', border: 'none', borderRadius: 0 }}
+                        style={{
+                            height: '100%',
+                            border: 'none',
+                            borderRadius: 0,
+                            background: isDarkMode ? '#141414' : '#ffffff',
+                        }}
+                        headStyle={{
+                            background: isDarkMode ? '#141414' : '#ffffff',
+                            borderBottom: `1px solid ${isDarkMode ? '#303030' : '#f0f0f0'}`,
+                            color: isDarkMode ? 'rgba(255,255,255,0.88)' : undefined,
+                        }}
                         bodyStyle={{ padding: '16px', paddingTop: '24px' }}
                     >
                         <Anchor onClick={handleClose}>

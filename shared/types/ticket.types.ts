@@ -1,4 +1,91 @@
 /**
+ * 反馈标签作用域
+ */
+export type FeedbackTagScope = 'PUBLIC' | 'INTERNAL' | 'DEVELOPER' | 'PROGRESS';
+
+/**
+ * 反馈标签状态
+ */
+export type FeedbackTagStatus = 'ACTIVE' | 'ARCHIVED';
+
+/**
+ * 反馈进度选项
+ */
+export const FEEDBACK_PROGRESS_OPTIONS = ['调研中', '开发中', '测试中', '已完成'] as const;
+export type FeedbackProgressName = (typeof FEEDBACK_PROGRESS_OPTIONS)[number];
+
+/** 按预设顺序排序含 name 字段的进度标签数组 */
+export const sortByProgressOrder = <T extends { name: string }>(items: T[]): T[] =>
+    [...items].sort((a, b) => {
+        const ai = FEEDBACK_PROGRESS_OPTIONS.indexOf(a.name as FeedbackProgressName);
+        const bi = FEEDBACK_PROGRESS_OPTIONS.indexOf(b.name as FeedbackProgressName);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+
+/**
+ * 反馈标签摘要
+ */
+export type FeedbackTagSummary = {
+    id: number;
+    name: string;
+    scope: FeedbackTagScope;
+    aliases?: string[];
+};
+
+export type FeedbackAdvancedFilterOperator =
+    | 'equals'
+    | 'notEquals'
+    | 'contains'
+    | 'notContains'
+    | 'greaterThan'
+    | 'greaterThanOrEqual'
+    | 'lessThan'
+    | 'lessThanOrEqual'
+    | 'isEmpty'
+    | 'isNotEmpty';
+
+export type FeedbackAdvancedFilter = {
+    column: string;
+    operator: FeedbackAdvancedFilterOperator;
+    value?: string | number | Array<string | number> | null;
+};
+
+export type FeedbackTagCountSummary = {
+    tag: FeedbackTagSummary;
+    count: number;
+};
+
+export type FeedbackListSummary = {
+    statusCounts: {
+        total: number;
+        open: number;
+        closed: number;
+        ended: number;
+    };
+    publicTags: FeedbackTagCountSummary[];
+    internalTags: FeedbackTagCountSummary[];
+    developerTags: FeedbackTagCountSummary[];
+    progressTags: FeedbackTagCountSummary[];
+    noProgressCount: number;
+};
+
+/**
+ * 反馈标签字典项
+ */
+export type FeedbackTagDictionaryItem = {
+    id: number;
+    name: string;
+    scope: FeedbackTagScope;
+    status: FeedbackTagStatus;
+    aliasOfTagId?: number | null;
+    aliasOfTagName?: string | null;
+    aliases?: string[];
+    usageCount: number;
+    create_time: string;
+    update_time: string;
+};
+
+/**
  * 工单账户信息
  */
 export interface TicketAccount {
@@ -199,14 +286,24 @@ export type FeedbackListItemDto = {
     title: string;
     priority: TicketPriority;
     create_time: string;
-    /** 标签，来自 feedback_meta.tag */
-    tag: string;
+    /** 面向玩家展示的公开标签 */
+    publicTags: FeedbackTagSummary[];
     /** 建议/BUG，来自 feedback_meta.type */
     feedbackType: 'SUGGESTION' | 'BUG';
     /** 最近一条回复时间 */
     lastReplyTime: string | null;
     /** 回复总条数（含主帖后的回复） */
     replyCount: number;
+};
+
+/** 管理端反馈列表项 */
+export type FeedbackAdminListItemDto = FeedbackListItemDto & {
+    /** 仅管理端可见的内部标签 */
+    internalTags: FeedbackTagSummary[];
+    /** 开发人员标签 */
+    developerTags: FeedbackTagSummary[];
+    /** 开发进度标签，null 表示"无" */
+    progressTag: FeedbackTagSummary | null;
 };
 
 /**
@@ -247,8 +344,14 @@ export type Feedback = {
     staff_alias?: string | Record<string, number>;
     /** 工单详情列表 */
     details?: TicketDetail[];
-    /** 标签，来自 feedback_meta.tag */
-    tag: string;
+    /** 面向玩家展示的公开标签 */
+    publicTags: FeedbackTagSummary[];
+    /** 仅管理端可见的内部标签 */
+    internalTags: FeedbackTagSummary[];
+    /** 开发人员标签 */
+    developerTags: FeedbackTagSummary[];
+    /** 开发进度标签，null 表示"无" */
+    progressTag: FeedbackTagSummary | null;
     /** 建议/BUG，来自 feedback_meta.type */
     feedbackType: 'SUGGESTION' | 'BUG';
     /** 最近一条回复时间 */
@@ -325,6 +428,8 @@ export type TicketDetail = {
     create_time: string;
     /** 是否官方回复 */
     isOfficial?: boolean;
+    /** 是否内部备注（仅管理端可见，action='N'） */
+    isNote?: boolean;
     /** 楼中楼：被回复的 detail id（仅反馈工单、回复某条时存在） */
     parentDetailId?: number;
 };

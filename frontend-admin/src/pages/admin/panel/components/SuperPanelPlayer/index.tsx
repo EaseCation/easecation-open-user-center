@@ -4,6 +4,7 @@ export { BasicInfoTab } from './BasicInfoTab';
 export { BanTab } from './BanTab';
 export { PlayerActionTab } from './PlayerActionTab';
 export { RecordingTab } from './RecordingTab';
+export { GamelogTab } from './GamelogTab';
 export { TicketTab } from './TicketTab';
 export { LoginTab } from './LoginTab';
 export { ChatTab } from './ChatTab';

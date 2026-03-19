@@ -1,6 +1,6 @@
 // 管理端社区风格的回复卡片组件
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Typography, Space, Tag, Image, Flex, Button, theme } from 'antd';
 import { CrownOutlined } from '@ant-design/icons';
 import { TicketDetail } from '@ecuc/shared/types/ticket.types';
@@ -128,6 +128,23 @@ const ReplyCard: React.FC<ReplyCardProps> = ({ detail, floorNumber }) => {
     const { token } = useToken();
     const hasOperator = !!detail.operator;
 
+    // 拦截工单引用链接点击，通过 CustomEvent 打开工单抽屉
+    const handleContentClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        const target = (e.target as HTMLElement).closest('a');
+        if (!target) return;
+        const href = target.getAttribute('href');
+        if (!href || !href.startsWith('/')) return;
+        e.preventDefault();
+        // 匹配 /ticket/operate/backToMy/{tid} 格式的工单引用链接
+        const tidMatch = href.match(/^\/ticket\/operate\/backToMy\/(\d+)$/);
+        if (tidMatch) {
+            window.dispatchEvent(new CustomEvent('openTidFromDetail', { detail: { tid: Number(tidMatch[1]) } }));
+        } else {
+            window.history.pushState({}, '', href);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+        }
+    }, []);
+
     return (
         <>
             <style>{FEEDBACK_REPLY_CONTENT_STYLE}</style>
@@ -185,6 +202,7 @@ const ReplyCard: React.FC<ReplyCardProps> = ({ detail, floorNumber }) => {
                                 wordBreak: 'break-word',
                             }}
                             className="feedback-reply-content"
+                            onClick={handleContentClick}
                             {...(detail.contentHtml != null && detail.contentHtml !== ''
                                 ? { dangerouslySetInnerHTML: { __html: detail.contentHtml } }
                                 : {

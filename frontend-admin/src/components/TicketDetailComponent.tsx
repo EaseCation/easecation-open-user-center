@@ -414,13 +414,33 @@ const TicketDetailComponent: React.FC<{
             );
         }
 
-        // 将 1 开头的六位数字渲染为链接按钮（仅管理员）
-        if (isAdmin && /\b1\d{5}\b/.test(processed)) {
-            // 拆分并逐段渲染，非 TID 片段使用内联 span 避免强制换行
-            const parts = processed.split(/(\b1\d{5}\b)/g);
+        // 将 #数字 或 1 开头的六位数字渲染为链接按钮（仅管理员）
+        if (isAdmin && (/#\d+\b/.test(processed) || /\b1\d{5}\b/.test(processed))) {
+            // 拆分并逐段渲染，#tid 和六位 TID 都渲染为可点击链接
+            const parts = processed.split(/(#\d+\b|\b1\d{5}\b)/g);
             return (
                 <span style={{ whiteSpace: 'pre-wrap' }}>
                     {parts.map((part, idx) => {
+                        const hashMatch = /^#(\d+)$/.exec(part);
+                        if (hashMatch) {
+                            const tidNum = Number(hashMatch[1]);
+                            return (
+                                <Button
+                                    key={`ref_${idx}_${part}`}
+                                    type="link"
+                                    size="small"
+                                    style={{ padding: 0, height: 'auto', lineHeight: 1 }}
+                                    onClick={() => {
+                                        const evt = new CustomEvent('openTidFromDetail', {
+                                            detail: { tid: tidNum },
+                                        });
+                                        window.dispatchEvent(evt);
+                                    }}
+                                >
+                                    {part}
+                                </Button>
+                            );
+                        }
                         if (/^1\d{5}$/.test(part)) {
                             const tidNum = Number(part);
                             return (

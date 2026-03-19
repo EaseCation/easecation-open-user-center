@@ -1,6 +1,3 @@
-// 反馈中心 PC 端侧边栏组件
-// 布局参考 AdminPCSidebar，左侧包含搜索、筛选器和反馈列表
-
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
@@ -13,39 +10,38 @@ import {
     Tooltip,
     Typography,
     Watermark,
-    Modal,
     theme,
 } from 'antd';
 import {
-    DownOutlined,
+    DatabaseOutlined,
     HomeOutlined,
     MessageOutlined,
     PlusOutlined,
     ReloadOutlined,
     SearchOutlined,
     SortAscendingOutlined,
-    UpOutlined,
-    UserOutlined,
+    TagsOutlined,
 } from '@ant-design/icons';
 import { gLang } from '@common/language';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@common/contexts/AuthContext';
-import { FeedbackListItemDto } from '@ecuc/shared/types/ticket.types';
+import { FeedbackAdminListItemDto } from '@ecuc/shared/types/ticket.types';
 import { fetchData } from '@common/axiosConfig';
 import { useFeedbackFilters } from '@common/hooks/useFeedbackFilters';
 import useDarkMode from '@common/hooks/useDarkMode';
 import FeedbackListItem from './components/FeedbackListItem';
 import CreateFeedbackModal from './CreateFeedbackModal';
-import { FeedbackStatus } from './FeedbackManage';
+import FeedbackTagAssignModal from './components/FeedbackTagAssignModal';
+import FeedbackTagSelect, { TAG_NONE_VALUE } from '@common/components/Feedback/FeedbackTagSelect';
 import type { FeedbackSortBy, FeedbackOrder } from '@common/hooks/useFeedbackFilters';
 import { getGlobalMessageApi } from '@common/utils/messageApiHolder';
+import { FeedbackStatus } from './feedbackStatus';
 
 const { Title, Text } = Typography;
 
 const FeedbackPCSidebar: React.FC = () => {
     const { pathname } = useLocation();
     const navigate = useNavigate();
-    // 从当前路径 /ticket/operate/backToMy/:tid 中解析选中的 tid，用于高亮列表项
     const currentTidMatch = pathname.match(/\/ticket\/operate\/[^/]+\/(\d+)/);
     const currentTid = currentTidMatch ? currentTidMatch[1] : undefined;
     const { user } = useAuth();
@@ -53,167 +49,131 @@ const FeedbackPCSidebar: React.FC = () => {
     const { token } = useToken();
     const isDarkMode = useDarkMode();
 
-    // 高级筛选折叠状态
-    const [advancedOpen, setAdvancedOpen] = useState(false);
-
-    // 列表数据状态
-    const [spinning, setSpinning] = useState(false);
-    const [tickets, setTickets] = useState<FeedbackListItemDto[]>([]);
+    const [tickets, setTickets] = useState<FeedbackAdminListItemDto[]>([]);
     const [total, setTotal] = useState(0);
+    const [spinning, setSpinning] = useState(false);
     const [createFeedbackModalVisible, setCreateFeedbackModalVisible] = useState(false);
+    const [editingTicket, setEditingTicket] = useState<FeedbackAdminListItemDto | null>(null);
+    const [searchKeyword, setSearchKeyword] = useState('');
+    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const searchKeywordRef = useRef('');
 
-    // OpenID 查询状态
-    const [openidQueryModalVisible, setOpenidQueryModalVisible] = useState(false);
-    const [openidInput, setOpenidInput] = useState('');
-    const [openidQueried, setOpenidQueried] = useState<string | null>(null);
-    const [, setSubscriptionsByOpenid] = useState<FeedbackListItemDto[] | null>(null);
-    const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
-
-    // 使用共享的筛选 Hook
     const filters = useFeedbackFilters({
         pageSize: 20,
         initialFilters: { filterStatus: [], sortBy: 'lastReplyTime', order: 'desc' },
     });
     const {
-        filterTag,
+        publicTagIds,
+        internalTagIds,
+        developerTagIds,
+        progressTagIds,
+        noProgressTag,
         filterType,
         filterStatus,
         sortBy,
         order,
         page,
         pageSize,
-        setFilterTag,
+        setPublicTagIds,
+        setInternalTagIds,
+        setDeveloperTagIds,
+        setProgressTagIds,
+        setNoProgressTag,
         setFilterType,
         setFilterStatus,
         setSortBy,
         setOrder,
         setPage,
+        setPageSize,
     } = filters;
 
-    const [searchKeyword, setSearchKeyword] = useState('');
-    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        searchKeywordRef.current = searchKeyword;
+    }, [searchKeyword]);
 
-    // 加载反馈列表（服务端关键词搜索，分页用接口返回的 total）。keyword 可选，不传时用当前 searchKeyword
     const loadList = useCallback(
         (pageNum: number, keyword?: string) => {
             setSpinning(true);
-            const params: Record<string, string | number | string[]> = {
+            const params: Record<string, string | number | string[] | number[]> = {
                 page: String(pageNum),
                 pageSize: String(pageSize),
                 sortBy,
                 order,
             };
-            if (filterTag != null && filterTag !== '') params.tag = filterTag;
-            if (filterType != null && filterType !== '') params.type = filterType;
-            if (filterStatus != null) {
-                if (Array.isArray(filterStatus) && filterStatus.length > 0) {
-                    params.status = filterStatus;
-                } else if (typeof filterStatus === 'string' && filterStatus !== '') {
-                    params.status = filterStatus;
-                }
+            if (publicTagIds?.length) params.publicTagIds = publicTagIds;
+            if (internalTagIds?.length) params.internalTagIds = internalTagIds;
+            if (developerTagIds?.length) params.developerTagIds = developerTagIds;
+            if (noProgressTag) {
+                params.noProgressTag = 'true';
+            } else if (progressTagIds?.length) {
+                params.progressTagIds = progressTagIds;
             }
-            const kw = keyword !== undefined ? keyword : searchKeyword;
-            if (kw.trim() !== '') params.keyword = kw.trim();
+            if (filterType) params.type = filterType;
+            if (Array.isArray(filterStatus) && filterStatus.length > 0) {
+                params.status = filterStatus;
+            }
+            const nextKeyword = keyword !== undefined ? keyword : searchKeywordRef.current.trim();
+            if (nextKeyword) params.keyword = nextKeyword;
 
             fetchData({
-                url: '/feedback/list',
+                url: '/feedback/admin/list',
                 method: 'GET',
                 data: params,
-                setData: (r: { list?: FeedbackListItemDto[]; total?: number }) => {
-                    setTickets(r?.list ?? []);
-                    setTotal(r?.total ?? 0);
+                setData: (data: { list?: FeedbackAdminListItemDto[]; total?: number }) => {
+                    setTickets(data?.list ?? []);
+                    setTotal(data?.total ?? 0);
                 },
-            }).finally(() => {
-                setSpinning(false);
-            });
+            }).finally(() => setSpinning(false));
         },
-        [pageSize, filterTag, filterType, filterStatus, sortBy, order, searchKeyword]
+        [pageSize, sortBy, order, publicTagIds, internalTagIds, developerTagIds, progressTagIds, noProgressTag, filterType, filterStatus]
     );
 
-    // 筛选条件变化时自动刷新列表
     useEffect(() => {
-        if (openidQueried) return;
-        setPage(1);
-        loadList(1);
-    }, [filterTag, filterType, filterStatus, sortBy, order, openidQueried, loadList]);
+        loadList(page);
+    }, [
+        page,
+        pageSize,
+        sortBy,
+        order,
+        filterType,
+        filterStatus,
+        publicTagIds,
+        internalTagIds,
+        developerTagIds,
+        progressTagIds,
+        noProgressTag,
+        loadList,
+    ]);
 
-    // 搜索关键词防抖：输入后 300ms 请求服务端搜索全部，并回到第 1 页（跳过首次挂载避免重复请求）
-    const searchEffectFirstRun = useRef(true);
     useEffect(() => {
-        if (openidQueried) return;
-        if (searchEffectFirstRun.current) {
-            searchEffectFirstRun.current = false;
-            return;
+        if (searchDebounceRef.current) {
+            clearTimeout(searchDebounceRef.current);
         }
-        if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
         searchDebounceRef.current = setTimeout(() => {
             searchDebounceRef.current = null;
             setPage(1);
-            loadList(1, searchKeyword);
+            loadList(1, searchKeyword.trim());
         }, 300);
         return () => {
-            if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+            if (searchDebounceRef.current) {
+                clearTimeout(searchDebounceRef.current);
+            }
         };
     }, [searchKeyword]);
 
-    // 按 OpenID 查询订阅
-    const handleQuerySubscriptionsByOpenid = useCallback(() => {
-        const openid = openidInput.trim();
-        if (!openid) return;
-        setLoadingSubscriptions(true);
-        setSubscriptionsByOpenid(null);
-        setOpenidQueried(openid);
-        setOpenidQueryModalVisible(false);
-        fetchData({
-            url: '/feedback/subscriptions/by-openid',
-            method: 'GET',
-            data: { openid },
-            setData: (r: { list?: FeedbackListItemDto[] }) => {
-                setSubscriptionsByOpenid(r?.list ?? []);
-            },
-        }).finally(() => setLoadingSubscriptions(false));
-    }, [openidInput]);
-
-    // 退出 OpenID 查询模式，回到普通列表
-    const handleBackToList = useCallback(() => {
-        setOpenidQueried(null);
-        setSubscriptionsByOpenid(null);
-        setOpenidInput('');
-        setPage(1);
-        loadList(1);
-    }, [loadList]);
-
-    // 从列表移除反馈
-    const handleRemoveFromFeedback = useCallback(
-        async (tidToRemove: number) => {
-            await fetchData({
-                url: '/feedback/remove',
-                method: 'POST',
-                data: { tid: tidToRemove },
-                setData: () => {},
-            });
-            setTickets(prev => prev.filter(t => t.tid !== tidToRemove));
-            // 如果当前正在查看被移除的反馈，跳回反馈管理首页
-            if (currentTid && Number(currentTid) === tidToRemove) {
-                navigate('/feedback');
-            }
-            getGlobalMessageApi()?.success(gLang('feedback.removeFromListSuccess'));
-        },
-        [currentTid, navigate]
-    );
-
-    // 更新本地列表的标签
-    const handleTagUpdate = useCallback((updatedTid: number, tag: string) => {
-        setTickets(prev => prev.map(t => (t.tid === updatedTid ? { ...t, tag } : t)));
-    }, []);
-
-    // 更新本地列表的类型
-    const handleTypeUpdate = useCallback(
-        (updatedTid: number, feedbackType: 'SUGGESTION' | 'BUG') => {
-            setTickets(prev => prev.map(t => (t.tid === updatedTid ? { ...t, feedbackType } : t)));
-        },
-        []
-    );
+    const handleRemoveFromFeedback = async (tidToRemove: number) => {
+        await fetchData({
+            url: '/feedback/remove',
+            method: 'POST',
+            data: { tid: tidToRemove },
+            setData: () => { },
+        });
+        setTickets(prev => prev.filter(ticket => ticket.tid !== tidToRemove));
+        if (currentTid && Number(currentTid) === tidToRemove) {
+            navigate('/feedback');
+        }
+        getGlobalMessageApi()?.success(gLang('feedback.removeFromListSuccess'));
+    };
 
     return (
         <Watermark
@@ -223,23 +183,42 @@ const FeedbackPCSidebar: React.FC = () => {
             style={{ display: 'flex', flex: 1, overflow: 'visible' }}
         >
             <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                {/* 顶部标题栏 */}
                 <Flex align="start" justify="space-between">
                     <Title level={4} style={{ margin: 0 }}>
                         {gLang('feedback.manageTitle')}
                     </Title>
-                    <Link to="/">
-                        <Tooltip title={gLang('dashboard.admin')}>
+                    <Space size={4}>
+                        <Tooltip title={gLang('feedback.table.title')}>
                             <Button
                                 type="text"
-                                icon={<HomeOutlined />}
-                                style={{ height: 28, width: 28 }}
+                                icon={<DatabaseOutlined />}
+                                onClick={() => navigate('/feedback/table')}
                             />
                         </Tooltip>
-                    </Link>
+                        <Tooltip title={gLang('feedback.tagLibrary.title')}>
+                            <Button
+                                type="text"
+                                icon={<TagsOutlined />}
+                                onClick={() => navigate('/feedback/tags')}
+                            />
+                        </Tooltip>
+                        <Link to={'/feedback'}>
+                            <Tooltip title={gLang('feedback.manageTitle')}>
+                                <Button
+                                    type="text"
+                                    icon={<MessageOutlined />}
+                                    style={{ height: 28, width: 28 }}
+                                />
+                            </Tooltip>
+                        </Link>
+                        <Link to="/">
+                            <Tooltip title={gLang('dashboard.admin')}>
+                                <Button type="text" icon={<HomeOutlined />} />
+                            </Tooltip>
+                        </Link>
+                    </Space>
                 </Flex>
 
-                {/* 操作按钮：新建（小号）+ OpenID查询 + 刷新 */}
                 <Flex gap={6} align="center">
                     <Button
                         type="primary"
@@ -250,62 +229,34 @@ const FeedbackPCSidebar: React.FC = () => {
                         {gLang('feedback.createFeedback')}
                     </Button>
                     <div style={{ flex: 1 }} />
-                    <Tooltip title={gLang('feedbackManage.queryByOpenid')}>
-                        <Button
-                            icon={<UserOutlined />}
-                            size="small"
-                            onClick={() => setOpenidQueryModalVisible(true)}
-                        />
-                    </Tooltip>
                     <Tooltip title={gLang('admin.feedbackRefresh')}>
                         <Button
                             icon={<ReloadOutlined />}
                             size="small"
                             loading={spinning}
-                            onClick={() => {
-                                if (openidQueried) {
-                                    handleBackToList();
-                                } else {
-                                    loadList(page);
-                                }
-                            }}
+                            onClick={() => loadList(page)}
                         />
                     </Tooltip>
                 </Flex>
 
-                {/* OpenID 查询模式提示 */}
-                {openidQueried && (
-                    <Flex align="center" gap={8} wrap="wrap">
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                            {gLang('feedbackManage.showingSubscriptionsFor')}: {openidQueried}
-                        </Text>
-                        <Button size="small" onClick={handleBackToList}>
-                            {gLang('feedbackManage.backToList')}
-                        </Button>
-                    </Flex>
-                )}
-
-                {/* 搜索框 */}
-                <Input
-                    placeholder={gLang('feedback.searchPlaceholder')}
-                    prefix={<SearchOutlined />}
-                    value={searchKeyword}
-                    onChange={e => setSearchKeyword(e.target.value)}
-                    allowClear
-                    size="small"
-                />
-
-                {/* 排序 + 高级筛选按钮（常驻，参考 TicketQuery 风格） */}
-                {!openidQueried && (
-                    <Flex gap={6} wrap="wrap">
+                <Space direction="vertical" size={10} style={{ width: '100%', marginBottom: 12 }}>
+                    <Input
+                        placeholder={gLang('feedback.searchPlaceholder')}
+                        prefix={<SearchOutlined />}
+                        value={searchKeyword}
+                        onChange={event => setSearchKeyword(event.target.value)}
+                        allowClear
+                        size="small"
+                        style={{ width: '100%' }}
+                    />
+                    <Flex gap={8} style={{ width: '100%' }}>
                         <Select
                             value={`${sortBy}_${order}`}
-                            onChange={(v: string) => {
-                                const [sb, od] = v.split('_');
-                                setSortBy(sb as FeedbackSortBy);
-                                setOrder(od as FeedbackOrder);
+                            onChange={(value: string) => {
+                                const [nextSortBy, nextOrder] = value.split('_');
+                                setSortBy(nextSortBy as FeedbackSortBy);
+                                setOrder(nextOrder as FeedbackOrder);
                             }}
-                            style={{ flex: 1, minWidth: 0 }}
                             size="small"
                             prefix={<SortAscendingOutlined />}
                             options={[
@@ -321,143 +272,123 @@ const FeedbackPCSidebar: React.FC = () => {
                                     value: 'createTime_desc',
                                     label: gLang('feedback.sortCreateTime') + ' ↓',
                                 },
-                                {
-                                    value: 'createTime_asc',
-                                    label: gLang('feedback.sortCreateTime') + ' ↑',
-                                },
+                                { value: 'createTime_asc', label: gLang('feedback.sortCreateTime') + ' ↑' },
                                 { value: 'heat_desc', label: gLang('feedback.sortHeat') + ' ↓' },
                                 { value: 'heat_asc', label: gLang('feedback.sortHeat') + ' ↑' },
                             ]}
+                            style={{ flex: 1 }}
                         />
-                        <Button
-                            type="link"
+                        <Select
                             size="small"
-                            onClick={() => setAdvancedOpen(o => !o)}
-                            icon={advancedOpen ? <UpOutlined /> : <DownOutlined />}
-                            style={{ paddingInline: 4 }}
-                        >
-                            {gLang('admin.feedbackAdvancedFilter')}
-                        </Button>
+                            value={filterType ?? ''}
+                            onChange={value => {
+                                setFilterType(value || undefined);
+                                setPage(1);
+                            }}
+                            options={[
+                                { value: '', label: gLang('feedback.typeAll') },
+                                { value: 'SUGGESTION', label: gLang('feedback.typeSuggestion') },
+                                { value: 'BUG', label: gLang('feedback.typeBug') },
+                            ]}
+                            style={{ flex: 1 }}
+                        />
+                        <Select
+                            size="small"
+                            value={
+                                Array.isArray(filterStatus) && filterStatus.length === 1
+                                    ? filterStatus[0]
+                                    : ''
+                            }
+                            onChange={value => {
+                                setFilterStatus(value ? [value] : []);
+                                setPage(1);
+                            }}
+                            options={[
+                                { value: '', label: gLang('feedback.allStatus') },
+                                { value: FeedbackStatus.Open, label: gLang('feedback.status.open') },
+                                {
+                                    value: FeedbackStatus.Closed,
+                                    label: gLang('feedback.status.closed'),
+                                },
+                                { value: FeedbackStatus.Ended, label: gLang('feedback.status.ended') },
+                            ]}
+                            style={{ flex: 1 }}
+                        />
                     </Flex>
-                )}
+                    <Flex gap={8}>
+                        <FeedbackTagSelect
+                            admin
+                            scope="PUBLIC"
+                            value={publicTagIds ?? []}
+                            onChange={value => {
+                                setPublicTagIds(value.length > 0 ? value : undefined);
+                                setPage(1);
+                            }}
+                            placeholder={gLang('feedback.filterPublicTagPlaceholder')}
+                            style={{ flex: 1, minWidth: 0 }}
+                        />
+                        <FeedbackTagSelect
+                            admin
+                            scope="INTERNAL"
+                            value={internalTagIds ?? []}
+                            onChange={value => {
+                                setInternalTagIds(value.length > 0 ? value : undefined);
+                                setPage(1);
+                            }}
+                            placeholder={gLang('feedback.filterInternalTagPlaceholder')}
+                            style={{ flex: 1, minWidth: 0 }}
+                        />
+                    </Flex>
+                    <Flex gap={8}>
+                        <FeedbackTagSelect
+                            admin
+                            scope="DEVELOPER"
+                            value={developerTagIds ?? []}
+                            onChange={value => {
+                                setDeveloperTagIds(value.length > 0 ? value : undefined);
+                                setPage(1);
+                            }}
+                            placeholder={gLang('feedback.filterDeveloperTagPlaceholder')}
+                            style={{ flex: 1, minWidth: 0 }}
+                        />
+                        <FeedbackTagSelect
+                            admin
+                            scope="PROGRESS"
+                            noneOption={gLang('feedback.noProgressTag')}
+                            value={noProgressTag ? [TAG_NONE_VALUE] : (progressTagIds ?? [])}
+                            onChange={value => {
+                                if (value.includes(TAG_NONE_VALUE)) {
+                                    setNoProgressTag(true);
+                                    setProgressTagIds(undefined);
+                                } else {
+                                    setNoProgressTag(undefined);
+                                    setProgressTagIds(value.length > 0 ? value : undefined);
+                                }
+                                setPage(1);
+                            }}
+                            placeholder={gLang('feedback.filterProgressPlaceholder')}
+                            style={{ flex: 1, minWidth: 0 }}
+                        />
+                    </Flex>
+                </Space>
 
-                {/* 高级筛选折叠面板（类型、状态、标签） */}
-                {!openidQueried && advancedOpen && (
-                    <div
-                        style={{
-                            padding: '10px 12px',
-                            background: token.colorBgContainer,
-                            borderRadius: token.borderRadiusLG,
-                            border: `1px solid ${token.colorBorderSecondary}`,
-                        }}
-                    >
-                        <Space direction="vertical" size={10} style={{ width: '100%' }}>
-                            {/* 类型 */}
-                            <Flex gap={6} align="center" wrap="wrap">
-                                <Text
-                                    type="secondary"
-                                    style={{ fontSize: 11, whiteSpace: 'nowrap' }}
-                                >
-                                    {gLang('feedback.filterType')}
-                                </Text>
-                                <Select
-                                    size="small"
-                                    style={{ flex: 1, minWidth: 80 }}
-                                    value={filterType ?? ''}
-                                    onChange={v => setFilterType(v === '' ? undefined : v)}
-                                    options={[
-                                        { value: '', label: gLang('feedback.typeAll') },
-                                        {
-                                            value: 'SUGGESTION',
-                                            label: gLang('feedback.typeSuggestion'),
-                                        },
-                                        { value: 'BUG', label: gLang('feedback.typeBug') },
-                                    ]}
-                                />
-                            </Flex>
-
-                            {/* 状态 */}
-                            <Flex gap={6} align="center" wrap="wrap">
-                                <Text
-                                    type="secondary"
-                                    style={{ fontSize: 11, whiteSpace: 'nowrap' }}
-                                >
-                                    {gLang('feedback.filterStatus')}
-                                </Text>
-                                <Select
-                                    size="small"
-                                    style={{ flex: 1, minWidth: 80 }}
-                                    value={
-                                        Array.isArray(filterStatus) && filterStatus.length === 1
-                                            ? filterStatus[0]
-                                            : ''
-                                    }
-                                    onChange={v => setFilterStatus(v === '' ? [] : [v])}
-                                    options={[
-                                        { value: '', label: gLang('feedback.allStatus') },
-                                        {
-                                            value: FeedbackStatus.Open,
-                                            label: gLang('feedback.status.open'),
-                                        },
-                                        {
-                                            value: FeedbackStatus.Closed,
-                                            label: gLang('feedback.status.closed'),
-                                        },
-                                        {
-                                            value: FeedbackStatus.Ended,
-                                            label: gLang('feedback.status.ended'),
-                                        },
-                                    ]}
-                                />
-                            </Flex>
-
-                            {/* 标签 */}
-                            <Flex gap={6} align="center">
-                                <Text
-                                    type="secondary"
-                                    style={{ fontSize: 11, whiteSpace: 'nowrap' }}
-                                >
-                                    {gLang('feedback.tag')}
-                                </Text>
-                                <Input
-                                    size="small"
-                                    style={{ flex: 1 }}
-                                    placeholder={gLang('feedback.tagPlaceholder')}
-                                    value={filterTag ?? ''}
-                                    onChange={e => setFilterTag(e.target.value || undefined)}
-                                    allowClear
-                                />
-                            </Flex>
-                        </Space>
-                    </div>
-                )}
-
-                {/* 反馈列表 */}
-                {spinning || loadingSubscriptions ? (
+                {spinning ? (
                     <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                        {[1, 2, 3, 4, 5].map((_, index) => (
-                            <Skeleton
-                                key={index}
-                                title
-                                paragraph={{ rows: 3 }}
-                                active
-                                style={{ width: '100%' }}
-                            />
+                        {[1, 2, 3, 4, 5].map(index => (
+                            <Skeleton key={index} title paragraph={{ rows: 3 }} active />
                         ))}
                     </Space>
-                ) : (tickets ?? []).length > 0 ? (
+                ) : tickets.length > 0 ? (
                     <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                        {(tickets ?? []).map(ticket => (
+                        {tickets.map(ticket => (
                             <FeedbackListItem
                                 key={ticket.tid}
                                 ticket={ticket}
-                                // 复用现有工单操作页，右侧渲染 TicketOperate
                                 to={`/ticket/operate/backToMy/${ticket.tid}`}
                                 selected={currentTid === ticket.tid.toString()}
                                 highlightColor={token.colorPrimary}
-                                onRemove={openidQueried ? undefined : handleRemoveFromFeedback}
-                                onTagUpdate={openidQueried ? undefined : handleTagUpdate}
-                                onTypeUpdate={openidQueried ? undefined : handleTypeUpdate}
+                                onEditTags={setEditingTicket}
+                                onRemove={handleRemoveFromFeedback}
                             />
                         ))}
                     </Space>
@@ -466,37 +397,33 @@ const FeedbackPCSidebar: React.FC = () => {
                         vertical
                         align="center"
                         justify="center"
-                        style={{
-                            padding: '40px 0',
-                            color: isDarkMode ? '#8c8c8c' : '#8c8c8c',
-                        }}
+                        style={{ padding: '40px 0', color: isDarkMode ? '#8c8c8c' : '#8c8c8c' }}
                     >
-                        <MessageOutlined style={{ fontSize: 32, opacity: 0.4, marginBottom: 8 }} />
                         <Text type="secondary" style={{ fontSize: 13 }}>
                             {gLang('feedback.noFeedback')}
                         </Text>
                     </Flex>
                 )}
 
-                {/* 分页（简洁模式） */}
-                {!openidQueried && total > pageSize && (
+                {total > pageSize && (
                     <Flex justify="center" style={{ paddingBottom: 16 }}>
                         <Pagination
                             simple
                             current={page}
                             pageSize={pageSize}
                             total={total}
-                            onChange={newPage => {
-                                setPage(newPage);
-                                loadList(newPage);
+                            onChange={nextPage => setPage(nextPage)}
+                            onShowSizeChange={(current, size) => {
+                                setPageSize(size);
+                                setPage(1);
                             }}
+                            showSizeChanger
                             size="small"
                         />
                     </Flex>
                 )}
             </Space>
 
-            {/* 创建反馈 Modal */}
             <CreateFeedbackModal
                 open={createFeedbackModalVisible}
                 onClose={() => {
@@ -505,33 +432,12 @@ const FeedbackPCSidebar: React.FC = () => {
                 }}
             />
 
-            {/* OpenID 查询 Modal */}
-            <Modal
-                title={gLang('feedbackManage.queryByOpenid')}
-                open={openidQueryModalVisible}
-                onOk={handleQuerySubscriptionsByOpenid}
-                onCancel={() => {
-                    setOpenidQueryModalVisible(false);
-                    setOpenidInput('');
-                }}
-                okText={gLang('feedbackManage.querySubscriptions')}
-                cancelText={gLang('common.cancel')}
-                confirmLoading={loadingSubscriptions}
-            >
-                <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                    <Text type="secondary">
-                        {gLang('feedbackManage.querySubscriptionsByOpenidDesc')}
-                    </Text>
-                    <Input
-                        placeholder={gLang('feedbackManage.querySubscriptionsByOpenid')}
-                        prefix={<UserOutlined />}
-                        value={openidInput}
-                        onChange={e => setOpenidInput(e.target.value)}
-                        allowClear
-                        onPressEnter={handleQuerySubscriptionsByOpenid}
-                    />
-                </Space>
-            </Modal>
+            <FeedbackTagAssignModal
+                open={Boolean(editingTicket)}
+                tid={editingTicket?.tid}
+                onClose={() => setEditingTicket(null)}
+                onSaved={() => loadList(page)}
+            />
         </Watermark>
     );
 };

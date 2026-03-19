@@ -108,14 +108,14 @@ export const getUtilityToolsConfig = (): UtilityToolConfig[] => {
             colorLight: '#13c2c2',
             colorDark: '#36cfc9',
         },
-        // 反馈管理 - requires authorize.normal
+        // 反馈管理 - no specific permission required
         {
             key: 'feedback-manage',
             title: gLang('feedback.manageTitle'),
             desc: gLang('utilityTools.feedbackManage.desc'),
             route: '/feedback',
             Icon: MessageOutlined,
-            permission: 'authorize.normal',
+            permission: null,
             colorLight: '#1890ff',
             colorDark: '#69c0ff',
         },

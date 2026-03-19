@@ -1,11 +1,12 @@
 // 管理端创建反馈模态框
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Form, Input, Button, message, Space, Segmented } from 'antd';
 import MarkdownEditor from '@common/components/MarkdownEditor/MarkdownEditor';
 import { fetchData } from '@common/axiosConfig';
 import { gLang } from '@common/language';
 import { useNavigate } from 'react-router-dom';
+import FeedbackTagSelect from '@common/components/Feedback/FeedbackTagSelect';
 
 interface CreateFeedbackModalProps {
     open: boolean;
@@ -18,11 +19,19 @@ const CreateFeedbackModal: React.FC<CreateFeedbackModalProps> = ({ open, onClose
     const navigate = useNavigate();
     const [messageApi, contextHolder] = message.useMessage();
 
+    useEffect(() => {
+        if (!open) {
+            form.resetFields();
+        }
+    }, [open, form]);
+
     const handleSubmit = async (values: {
         title: string;
         details: string;
         isPublic: boolean;
         subscriptions?: string;
+        publicTagIds?: number[];
+        internalTagIds?: number[];
     }) => {
         setLoading(true);
         try {
@@ -45,6 +54,8 @@ const CreateFeedbackModal: React.FC<CreateFeedbackModalProps> = ({ open, onClose
                     details: values.details,
                     isPublic: values.isPublic ?? true, // 默认为公开
                     subscriptions: subscriptionsList,
+                    publicTagIds: values.publicTagIds ?? [],
+                    internalTagIds: values.internalTagIds ?? [],
                 },
                 setData: (response: any) => {
                     if (response?.tid) {
@@ -74,9 +85,13 @@ const CreateFeedbackModal: React.FC<CreateFeedbackModalProps> = ({ open, onClose
             <Modal
                 title={gLang('feedback.createFeedbackTitle')}
                 open={open}
-                onCancel={onClose}
+                onCancel={() => {
+                    form.resetFields();
+                    onClose();
+                }}
                 footer={null}
                 width={600}
+                destroyOnHidden
             >
                 <Form
                     form={form}
@@ -120,6 +135,34 @@ const CreateFeedbackModal: React.FC<CreateFeedbackModalProps> = ({ open, onClose
                             placeholder={gLang('feedback.additionIntro')}
                             minRows={6}
                             maxRows={16}
+                        />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="publicTagIds"
+                        label={gLang('feedback.publicTag')}
+                        initialValue={[]}
+                    >
+                        <FeedbackTagSelect
+                            admin
+                            allowCreate
+                            scope="PUBLIC"
+                            placeholder={gLang('feedback.selectOrCreatePublicTag')}
+                            style={{ width: '100%' }}
+                        />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="internalTagIds"
+                        label={gLang('feedback.internalTag')}
+                        initialValue={[]}
+                    >
+                        <FeedbackTagSelect
+                            admin
+                            allowCreate
+                            scope="INTERNAL"
+                            placeholder={gLang('feedback.selectOrCreateInternalTag')}
+                            style={{ width: '100%' }}
                         />
                     </Form.Item>
 

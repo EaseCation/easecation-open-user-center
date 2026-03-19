@@ -35,9 +35,17 @@ import { MEDIA_TYPES } from '@ecuc/shared/constants/media.constants';
 import { FeedbackCenterCard } from './components/FeedbackCenterCard';
 import { FeedbackFormatCard } from './components/FeedbackFormatCard';
 
-const TicketOperate = () => {
-    const { type, tid } = useParams();
-    const [ticket, setTicket] = useState<Ticket>();
+interface TicketOperateProps {
+    tid?: string;
+    ticket?: Ticket;
+    onActionComplete?: () => void;
+}
+
+const TicketOperate = (props: TicketOperateProps) => {
+    const { type, tid: paramsTid } = useParams();
+    const { tid: propTid, ticket: propTicket, onActionComplete: propOnActionComplete } = props;
+    const tid = propTid || paramsTid;
+    const [ticket, setTicket] = useState<Ticket | undefined>(propTicket);
     const [shortcuts, setShortcuts] = useState<StaffShortcut[]>([]);
     const [spinning, setSpinning] = useState(false);
     const [isFormDisabled, setIsFormDisabled] = useState(false);
@@ -69,6 +77,8 @@ const TicketOperate = () => {
     } | null>(null);
     /** FB format: true = show feedback-style view in card and hide TicketDetailComponent; false = normal */
     const [feedbackFormatEnabled, setFeedbackFormatEnabled] = useState(true);
+    const isFeedbackFormatView =
+        ticket?.type === TicketType.Feedback && feedbackFormatEnabled;
 
     const CARD_NAV_KEYS: string[] = [
         'reportAlert',
@@ -364,7 +374,7 @@ const TicketOperate = () => {
                     ) : null}
 
                     {/*工单内容组件（FB 且开启反馈格式时由 FeedbackFormatCard 展示，此处隐藏）*/}
-                    {!(ticket?.type === TicketType.Feedback && feedbackFormatEnabled) ? (
+                    {!isFeedbackFormatView ? (
                         <div
                             ref={el => {
                                 (
@@ -540,7 +550,7 @@ const TicketOperate = () => {
                             cardRefsMap.current['replyForm'] = el;
                         }}
                     >
-                        {!(ticket?.type === TicketType.Feedback && feedbackFormatEnabled) && (
+                        {!isFeedbackFormatView && (
                             <TicketReplyForm
                                 form={form}
                                 ticket={ticket}
@@ -558,7 +568,8 @@ const TicketOperate = () => {
                     </div>
 
                     {/*操作工单卡片*/}
-                    {(ticket || forceShowCardKeys.has('ticketAction')) && ticket ? (
+                    {(ticket || forceShowCardKeys.has('ticketAction')) &&
+                    ticket ? (
                         <div
                             ref={el => {
                                 cardRefsMap.current['ticketAction'] = el;
@@ -575,23 +586,34 @@ const TicketOperate = () => {
                                 returnToMy={returnToMy}
                                 toLink={toLink}
                                 tid={tid}
+                                onActionComplete={
+                                    propOnActionComplete
+                                        ? propOnActionComplete
+                                        : ticket?.type === TicketType.Feedback
+                                          ? updateTicketDetail
+                                          : undefined
+                                }
                             />
                         </div>
                     ) : null}
 
                     {/* 申请人Openid操作面板 */}
-                    {(ticket || forceShowCardKeys.has('openidPanel')) && ticket ? (
+                    {!isFeedbackFormatView &&
+                    (ticket || forceShowCardKeys.has('openidPanel')) &&
+                    ticket ? (
                         <div
                             ref={el => {
                                 cardRefsMap.current['openidPanel'] = el;
                             }}
                         >
-                            <OpenidPanelComponent openid={ticket.creator_openid} />
+                            <OpenidPanelComponent openid={ticket.creator_openid || ''} />
                         </div>
                     ) : null}
 
                     {/*开发者模式*/}
-                    {(ticket || forceShowCardKeys.has('quickOps')) && ticket ? (
+                    {!isFeedbackFormatView &&
+                    (ticket || forceShowCardKeys.has('quickOps')) &&
+                    ticket ? (
                         <div
                             ref={el => {
                                 cardRefsMap.current['quickOps'] = el;

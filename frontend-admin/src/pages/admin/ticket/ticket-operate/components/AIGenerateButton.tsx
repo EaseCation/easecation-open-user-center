@@ -1,12 +1,13 @@
 // 工单操作页面中的AI生成按钮
 
-import React from 'react';
-import { Button, ConfigProvider, Input, Modal, Space, message } from 'antd';
+import React, { useState, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { Button, ConfigProvider, Input, Modal, Space, Tag, message } from 'antd';
 import { MessageFilled } from '@ant-design/icons';
 import { gLang } from '@common/language';
 import { useStyle } from '@common/hooks/useStyle';
 import { AIStreamProvider, useAIStreamContext } from '@common/contexts/AIStreamContext';
 import { StreamModalContent } from '../../../../../components/StreamModalContent';
+import { FEEDBACK_AI_PRESETS, type FeedbackAIPreset } from '../../../../../constants/feedback-ai-prompts';
 
 interface AIGenerateButtonProps {
     onGenerate?: (prompt: string) => Promise<void>; // 向后兼容，但不再使用
@@ -14,6 +15,12 @@ interface AIGenerateButtonProps {
     className?: string;
     tid?: string;
     form?: any;
+    /** 是否显示预设提示词（反馈工单用） */
+    showPresets?: boolean;
+}
+
+export interface AIGenerateButtonRef {
+    showDialog: (presetKey?: string, context?: string) => void;
 }
 
 const { TextArea } = Input;
@@ -29,7 +36,12 @@ const StreamModalFooter: React.FC<{
 
     const handleUse = () => {
         // 直接从DOM获取TextArea的当前值
-        const textAreas = document.querySelectorAll(gLang('admin.ticketAiAnswerSelector'));
+        const selector = gLang('admin.ticketAiAnswerSelector');
+        const safeSelector =
+            typeof selector === 'string' && selector.trim()
+                ? selector
+                : 'textarea[placeholder*="AI"]';
+        const textAreas = document.querySelectorAll(safeSelector);
         let replyContent = '';
 
         if (textAreas.length > 0) {
@@ -76,13 +88,73 @@ const StreamModalFooter: React.FC<{
     );
 };
 
+// 预设提示词确认弹窗的内容组件
+const PresetDialogContent: React.FC<{
+    showPresets: boolean;
+    initialPresetKey?: string;
+    initialContext?: string;
+    promptRef: React.MutableRefObject<string>;
+}> = ({ showPresets, initialPresetKey, initialContext, promptRef }) => {
+    const initialPreset = initialPresetKey
+        ? FEEDBACK_AI_PRESETS.find(p => p.key === initialPresetKey)
+        : undefined;
+    const buildPrompt = (presetPrompt: string, ctx?: string) =>
+        ctx ? `${ctx}\n${presetPrompt}` : presetPrompt;
+    const [selectedPreset, setSelectedPreset] = useState<string | null>(initialPresetKey ?? null);
+    const [promptValue, setPromptValue] = useState(buildPrompt(initialPreset?.prompt ?? '', initialContext));
+
+    // 同步到 ref
+    React.useEffect(() => {
+        promptRef.current = promptValue;
+    }, [promptValue, promptRef]);
+
+    const handlePresetClick = useCallback((preset: FeedbackAIPreset) => {
+        setSelectedPreset(preset.key);
+        setPromptValue(buildPrompt(preset.prompt, initialContext));
+    }, [initialContext]);
+
+    return (
+        <Space direction="vertical" style={{ display: 'flex' }}>
+            {gLang('ticketOperate.aiReplyConfirmContent')}
+            {showPresets && (
+                <div>
+                    <div style={{ marginBottom: 8, fontSize: 13, color: '#666' }}>{gLang('admin.feedbackPresetPromptLabel')}</div>
+                    <Space wrap>
+                        {FEEDBACK_AI_PRESETS.map(preset => (
+                            <Tag
+                                key={preset.key}
+                                color={selectedPreset === preset.key ? 'blue' : undefined}
+                                style={{ cursor: 'pointer', padding: '2px 8px' }}
+                                onClick={() => handlePresetClick(preset)}
+                            >
+                                {preset.label}
+                            </Tag>
+                        ))}
+                    </Space>
+                </div>
+            )}
+            <TextArea
+                placeholder={gLang('ticketOperate.aiReplyConfirmPrompt')}
+                value={promptValue}
+                onChange={e => {
+                    setPromptValue(e.target.value);
+                    setSelectedPreset(null);
+                }}
+                autoSize={{ minRows: 2, maxRows: 6 }}
+            />
+        </Space>
+    );
+};
+
 // 内部组件，使用Context获取状态
-const AIGenerateButtonInternal = React.memo((props: AIGenerateButtonProps) => {
-    const { className, tid, form } = props;
-    const [modal, contextHolder] = Modal.useModal();
+const AIGenerateButtonInternal = forwardRef<AIGenerateButtonRef, AIGenerateButtonProps>((props, ref) => {
+    const { className, tid, form, showPresets = false } = props;
+    const [confirmOpen, setConfirmOpen] = useState(false);
     const [streamModal, streamContextHolder] = Modal.useModal();
     const [messageApi, messageContextHolder] = message.useMessage();
     const promptRef = React.useRef('');
+    const pendingPresetKeyRef = React.useRef<string | undefined>(undefined);
+    const pendingContextRef = React.useRef<string | undefined>(undefined);
     const { isLoading, startStream, cancelStream, resetStream } = useAIStreamContext();
 
     // 流式生成处理函数
@@ -94,7 +166,7 @@ const AIGenerateButtonInternal = React.memo((props: AIGenerateButtonProps) => {
 
         resetStream();
 
-        // 显示流式输出模态框 - 使用React Portal方式
+        // 显示流式输出模态框
         const streamModalInstance = streamModal.info({
             title: gLang('admin.ticketAiThinkingTitle'),
             content: (
@@ -114,10 +186,9 @@ const AIGenerateButtonInternal = React.memo((props: AIGenerateButtonProps) => {
                 </div>
             ),
             width: 800,
-            footer: null, // 不使用默认footer
+            footer: null,
         });
 
-        // 开始流式请求
         const ticketId = parseInt(tid || '0');
         if (isNaN(ticketId) || ticketId === 0) {
             throw new Error(gLang('admin.ticketInvalidId'));
@@ -125,33 +196,25 @@ const AIGenerateButtonInternal = React.memo((props: AIGenerateButtonProps) => {
         await startStream(ticketId, prompt || undefined);
     };
 
-    const showDialog = async () => {
+    const showDialog = useCallback((presetKey?: string, context?: string) => {
         promptRef.current = '';
-        const confirmed = await modal.confirm({
-            icon: <MessageFilled />,
-            centered: true,
-            title: gLang('ticketOperate.aiReplyConfirm'),
-            content: (
-                <Space orientation="vertical" style={{ display: 'flex' }}>
-                    {gLang('ticketOperate.aiReplyConfirmContent')}
-                    <TextArea
-                        placeholder={gLang('ticketOperate.aiReplyConfirmPrompt')}
-                        onChange={e => (promptRef.current = e.target.value)}
-                        autoSize={{ minRows: 2, maxRows: 6 }}
-                    />
-                </Space>
-            ),
-            okText: gLang('ticketOperate.aiReplyConfirmOK'),
-            okButtonProps: {
-                className: className, // 应用相同样式类
-            },
-            cancelText: gLang('cancel'),
-        });
+        pendingPresetKeyRef.current = presetKey;
+        pendingContextRef.current = context;
+        setConfirmOpen(true);
+    }, []);
 
-        if (confirmed) {
-            await handleStreamGenerate(promptRef.current);
-        }
-    };
+    const handleConfirmOk = useCallback(async () => {
+        setConfirmOpen(false);
+        await handleStreamGenerate(promptRef.current);
+    }, [tid, form]);
+
+    const handleConfirmCancel = useCallback(() => {
+        setConfirmOpen(false);
+    }, []);
+
+    useImperativeHandle(ref, () => ({
+        showDialog,
+    }), [showDialog]);
 
     const { styles } = useStyle();
 
@@ -161,18 +224,36 @@ const AIGenerateButtonInternal = React.memo((props: AIGenerateButtonProps) => {
                 className: styles.aiButton,
             }}
         >
-            {contextHolder}
             <div key="stream-modal-holder">{streamContextHolder}</div>
             {messageContextHolder}
             <Button
                 type="primary"
                 icon={<MessageFilled />}
                 loading={isLoading}
-                onClick={showDialog}
+                onClick={() => showDialog()}
                 className={className}
             >
                 {gLang('ticketOperate.aiReply')}
             </Button>
+            <Modal
+                open={confirmOpen}
+                centered
+                title={gLang('ticketOperate.aiReplyConfirm')}
+                okText={gLang('ticketOperate.aiReplyConfirmOK')}
+                cancelText={gLang('cancel')}
+                onOk={handleConfirmOk}
+                onCancel={handleConfirmCancel}
+                okButtonProps={{ className }}
+            >
+                {confirmOpen && (
+                    <PresetDialogContent
+                        showPresets={showPresets}
+                        initialPresetKey={pendingPresetKeyRef.current}
+                        initialContext={pendingContextRef.current}
+                        promptRef={promptRef}
+                    />
+                )}
+            </Modal>
             <style>{`
                 @keyframes blink {
                     0%, 50% { opacity: 1; }
@@ -186,10 +267,10 @@ const AIGenerateButtonInternal = React.memo((props: AIGenerateButtonProps) => {
 AIGenerateButtonInternal.displayName = 'AIGenerateButtonInternal';
 
 // 主导出组件，包装Context Provider
-export const AIGenerateButton = React.memo((props: AIGenerateButtonProps) => {
+export const AIGenerateButton = forwardRef<AIGenerateButtonRef, AIGenerateButtonProps>((props, ref) => {
     return (
         <AIStreamProvider>
-            <AIGenerateButtonInternal {...props} />
+            <AIGenerateButtonInternal ref={ref} {...props} />
         </AIStreamProvider>
     );
 });

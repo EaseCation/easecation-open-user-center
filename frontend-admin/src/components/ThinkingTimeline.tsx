@@ -39,14 +39,16 @@ export const ThinkingTimeline: React.FC<ThinkingTimelineProps> = ({
         }
     }, [finalAnswer]);
 
-    // 自动展开执行中的步骤，收起已完成的步骤
+    // 自动展开执行中的步骤，收起已完成的步骤1
     useEffect(() => {
         const newExpandedSteps = new Set<number>();
-        steps.forEach((step, index) => {
-            if (step.status === 'executing' || step.status === 'failed') {
-                newExpandedSteps.add(index);
-            }
-        });
+        if (Array.isArray(steps)) {
+            steps.forEach((step, index) => {
+                if (step.status === 'executing' || step.status === 'failed') {
+                    newExpandedSteps.add(index);
+                }
+            });
+        }
         setExpandedSteps(newExpandedSteps);
     }, [steps]);
 
@@ -106,9 +108,15 @@ export const ThinkingTimeline: React.FC<ThinkingTimelineProps> = ({
         return typeMap[nodeType] || nodeType;
     };
 
-    const timelineItems = steps.map((step, index) => {
+    const timelineItems = Array.isArray(steps) ? steps.map((step, index) => {
         const isExpanded = expandedSteps.has(index);
-        const hasContent = step.content && step.content.trim();
+        const normalizedContent =
+            typeof step.content === 'string'
+                ? step.content
+                : step.content === undefined || step.content === null
+                  ? ''
+                  : JSON.stringify(step.content);
+        const hasContent = normalizedContent.trim().length > 0;
 
         return {
             icon: getStepIcon(step.status),
@@ -177,11 +185,11 @@ export const ThinkingTimeline: React.FC<ThinkingTimelineProps> = ({
                                 {(() => {
                                     try {
                                         // 尝试格式化JSON显示
-                                        const parsed = JSON.parse(step.content);
+                                        const parsed = JSON.parse(normalizedContent);
                                         return JSON.stringify(parsed, null, 2);
                                     } catch {
                                         // 不是JSON，原样显示
-                                        return step.content;
+                                        return normalizedContent;
                                     }
                                 })()}
                             </div>
@@ -204,10 +212,10 @@ export const ThinkingTimeline: React.FC<ThinkingTimelineProps> = ({
                 </Card>
             ),
         };
-    });
+    }) : [];
 
     // 如果还在加载，添加一个加载中的item
-    if (isLoading && steps.length > 0) {
+    if (isLoading && Array.isArray(steps) && steps.length > 0) {
         timelineItems.push({
             icon: <LoadingOutlined style={{ color: '#1890ff' }} spin />,
             children: (
@@ -241,7 +249,7 @@ export const ThinkingTimeline: React.FC<ThinkingTimelineProps> = ({
                 </Text>
             </div>
 
-            {steps.length > 0 ? (
+            {Array.isArray(steps) && steps.length > 0 ? (
                 <Timeline
                     items={timelineItems}
                     style={{
