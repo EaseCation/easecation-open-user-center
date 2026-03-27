@@ -1,0 +1,37 @@
+name: 同步 GitHub 标签
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/LABELS/labels.yml'
+  workflow_dispatch:
+
+jobs:
+  sync-labels:
+    name: 同步标签配置
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 同步标签
+        uses: EndBug/label-sync@v2
+        with:
+          config-file: .github/LABELS/labels.yml'
+
+          delete-other-labels: false
+
+          pr-labels: true
+
+          issue-labels: true
+
+          info-comments: false
+
+          token: ${{ secrets.GITHUB_TOKEN }}

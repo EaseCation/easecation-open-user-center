@@ -1,0 +1,119 @@
+# ========== 类型标签 ==========
+- name: "type: bug"
+  color: "d73a4a"
+  description: "报告一个 bug | Something isn't working"
+
+- name: "type: enhancement"
+  color: "a2eeef"
+  description: "现有功能改进 | Optimize or improve content"
+
+- name: "type: feature"
+  color: "2ecc71"
+  description: "新功能需求 | New feature or request"
+
+- name: "type: refactor"
+  color: "fbca04"
+  description: "代码重构 | Refactoring something"
+
+- name: "type: documentation"
+  color: "0075ca"
+  description: "文档改进 | Improvements or additions to documentation"
+
+- name: "type: performance"
+  color: "b60205"
+  description: "性能优化 | Performance optimization"
+
+- name: "type: chore"
+  color: "cccccc"
+  description: "日常维护 | Routine maintenance tasks"
+
+
+# ========== 状态标签 ==========
+- name: "status: accepted"
+  color: "0e8a16"
+  description: "已接受，允许外部贡献者提交 PR | Authorized for external PR"
+
+- name: "status: pending"
+  color: "f9d0c4"
+  description: "等待处理 | The issue is waiting to be addressed"
+
+- name: "status: under review"
+  color: "fbca04"
+  description: "正在审查 | This issue or pull request is under review"
+
+- name: "status: review failed"
+  color: "b60205"
+  description: "审查未通过 | Review or inspection failed"
+
+- name: "status: mergeable"
+  color: "2ecc71"
+  description: "准备合并 | This pull request is ready to merge"
+
+- name: "status: merge suspended"
+  color: "7057ff"
+  description: "暂缓合并 | Merge suspended"
+
+- name: "status: conflicts"
+  color: "d73a4a"
+  description: "分支有冲突 | This branch has conflicts that must be resolved"
+
+# ========== 优先级标签 ==========
+- name: "priority: high"
+  color: "b60205"
+  description: "高优先级 | High priority"
+
+- name: "priority: medium"
+  color: "fbca04"
+  description: "中等优先级 | Medium priority"
+
+- name: "priority: low"
+  color: "0e8a16"
+  description: "低优先级 | Low priority"
+
+# ========== 贡献者标签 ==========
+- name: "good first issue"
+  color: "7057ff"
+  description: "适合首次贡献者 | Good for newcomers"
+
+- name: "help wanted"
+  color: "008672"
+  description: "需要帮助 | Extra attention is needed"
+
+# ========== 特殊标签 ==========
+- name: "special: pinned"
+  color: "e4e669"
+  description: "置顶议题 | The published issues or pinned issues"
+
+- name: "special: internal"
+  color: "666666"
+  description: "仅内部开发 | Internal development, no external contributions"
+
+# ========== 决议标签 ==========
+- name: "resolution: duplicate"
+  color: "cfd3d7"
+  description: "重复议题 | This issue or pull request already exists"
+
+- name: "resolution: invalid"
+  color: "e4e669"
+  description: "无效议题 | This doesn't seem right"
+
+- name: "resolution: wontfix"
+  color: "cccccc"
+  description: "不再处理 | This will not be worked on"
+
+- name: "resolution: low value"
+  color: "d3d3d3"
+  description: "价值较低 | Low content quality"
+
+- name: "resolution: inappropriate"
+  color: "b60205"
+  description: "内容不合适 | Inappropriate topic of issues"
+
+- name: "resolution: separate need"
+  color: "fbca04"
+  description: "需要拆分为多个议题 | The content needs to be separated into multiple topics"
+
+# ========== 问题标签 ==========
+- name: "question"
+  color: "d876e3"
+  description: "需要更多信息 | Further information is requested"

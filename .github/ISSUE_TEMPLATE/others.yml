@@ -1,0 +1,14 @@
+name: 其他
+description: 其他内容
+title: "[Others] "
+labels: ["type: chore", "status: pending"]
+assignees: []
+body:
+  - type: textarea
+    id: content
+    attributes:
+      label: 描述
+      description: 请描述你的诉求
+      placeholder: 请描述你的诉求
+    validations:
+      required: true

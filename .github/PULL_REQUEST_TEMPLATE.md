@@ -5,6 +5,7 @@
 - [ ] Feat: 新功能
 - [ ] Fix: Bug修复
 - [ ] Refactor: 代码重构
+- [ ] Enh: 现有功能改进
 - [ ] Perf: 性能优化
 - [ ] Docs: 文档更新
 - [ ] Test: 测试相关
