@@ -14,7 +14,7 @@ import {
     ticketWithTarget,
 } from '../../../../config/ticketConfig';
 import { StaffShortcut } from '@ecuc/shared/types/player.types';
-import { Ticket, TicketType, TicketStatus } from '@ecuc/shared/types/ticket.types';
+import { FeedbackTagSummary, Ticket, TicketType, TicketStatus } from '@ecuc/shared/types/ticket.types';
 import { PlayerActionCard } from './components/player-action-card/PlayerActionCard';
 import { TicketReplyForm } from './components/TicketReplyForm';
 import { TicketActionCard } from './components/TicketActionCard';
@@ -77,6 +77,8 @@ const TicketOperate = (props: TicketOperateProps) => {
     } | null>(null);
     /** FB format: true = show feedback-style view in card and hide TicketDetailComponent; false = normal */
     const [feedbackFormatEnabled, setFeedbackFormatEnabled] = useState(true);
+    /** GU工单的过程标签，由 FeedbackFormatCard 加载 /feedback/detail 后回传；null=无标签，undefined=未加载 */
+    const [feedbackProgressTag, setFeedbackProgressTag] = useState<FeedbackTagSummary | null | undefined>(undefined);
     const isFeedbackFormatView =
         ticket?.type === TicketType.Feedback && feedbackFormatEnabled;
 
@@ -369,6 +371,7 @@ const TicketOperate = (props: TicketOperateProps) => {
                                 feedbackFormatEnabled={feedbackFormatEnabled}
                                 setFeedbackFormatEnabled={setFeedbackFormatEnabled}
                                 forceShow={forceShowCardKeys.has('feedbackFormat')}
+                                onFeedbackDetailLoaded={f => setFeedbackProgressTag(f.progressTag ?? null)}
                             />
                         </div>
                     ) : null}
@@ -435,6 +438,7 @@ const TicketOperate = (props: TicketOperateProps) => {
                                       <PlayerActionCard
                                           key={`initiator-${ticket?.tid ?? 'param'}-${ecid}`}
                                           ecid={ecid}
+                                          ticketType={ticket?.type}
                                           playerType={
                                               ticket
                                                   ? gLang('ticketList.account.' + ticket.type)
@@ -476,6 +480,7 @@ const TicketOperate = (props: TicketOperateProps) => {
                                       <PlayerActionCard
                                           key={`target-${ticket?.tid ?? 'param'}-${ecid}`}
                                           ecid={ecid}
+                                          ticketType={ticket?.type}
                                           playerType={
                                               ticket
                                                   ? gLang('ticketList.target.' + ticket.type)
@@ -569,7 +574,8 @@ const TicketOperate = (props: TicketOperateProps) => {
 
                     {/*操作工单卡片*/}
                     {(ticket || forceShowCardKeys.has('ticketAction')) &&
-                    ticket ? (
+                    ticket &&
+                    !(ticket.type === TicketType.Feedback && feedbackProgressTag != null) ? (
                         <div
                             ref={el => {
                                 cardRefsMap.current['ticketAction'] = el;

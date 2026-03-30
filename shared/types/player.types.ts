@@ -115,7 +115,12 @@ export type PlayerBanInfo = {
         | 'PARKOUR'
         | 'CLEAR_SCORE'
         | 'CLEAR_DEGREE'
-        | 'OVERWATCH';
+        | 'OVERWATCH'
+        | 'FREEZE_SCORE_TOP'
+        | 'UNFREEZE_SCORE_TOP'
+        | 'RESTRICT_NICK'
+        | 'UNRESTRICT_NICK'
+        | 'CPS_LIMIT_TRIG';
     target: string;
     source: string;
     hours: number;

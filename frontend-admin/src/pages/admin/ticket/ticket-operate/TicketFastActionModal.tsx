@@ -31,14 +31,13 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
     action,
     tid,
     authorizer,
-    reason,
     onRefresh,
     updateTicketDetail,
 }) => {
     const [messageApi, contextHolder] = message.useMessage();
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
-    const [punishType, setPunishType] = useState<string>('ban');
+    const [punishType, setPunishType] = useState<string>('hack');
     const [giftStats, setGiftStats] = useState<GiftSendStats | null>(null);
     /** When last24h > 5, confirm button is frozen for 3 seconds; this is remaining seconds. */
     const [giftConfirmCooldown, setGiftConfirmCooldown] = useState(0);
@@ -71,6 +70,11 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
     // 已发满 5 个时提示，即第 6 个及以后弹出（last24h >= 5）
     const giftOverThreshold = typeof giftLast24h === 'number' && giftLast24h >= GIFT_THRESHOLD;
     const GIFT_COOLDOWN_SEC = 3;
+    const requiresReason = action === 'punish' || action === 'unban' || action === 'unmute' || action === 'unfreeze_score_top' || action === 'unrestrict_nick';
+    const showsValueInput =
+        action === 'report' ||
+        action === 'feedback' ||
+        (action === 'punish' && punishType !== 'warn' && punishType !== 'overwatch' && punishType !== 'restrict_nick');
 
     // When last24h >= 5 (第6个及以后), freeze confirm button for 3 seconds.
     useEffect(() => {
@@ -138,7 +142,7 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
     // 处理处罚类型变化
     const handlePunishTypeChange = (value: string) => {
         setPunishType(value);
-        if (value !== 'ban') {
+        if (value !== 'hack') {
             // 非封禁类型，清空时间和理由
             form.setFieldsValue({
                 value: 1,
@@ -244,18 +248,25 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
                     ...(action === 'punish'
                         ? {
                               ...(punishType !== 'warn' &&
-                                  punishType !== 'overwatch' && {
+                                  punishType !== 'overwatch' &&
+                                  punishType !== 'restrict_nick' && {
                                       time:
                                           typeof values.value === 'string'
                                               ? parseInt(values.value)
                                               : values.value,
-                                  }), // 警告类型不发送时间，确保time是数字
+                                  }), // 警告/监管/昵称限制类型不发送时间，确保time是数字
                               reason: values.reason,
                               type: values.type,
                           }
-                        : {
-                              value: values.value,
-                          }),
+                        : action === 'unban' || action === 'unmute'
+                          ? {
+                                reason: values.reason,
+                            }
+                          : action === 'transfer_to_hack'
+                            ? {}
+                            : {
+                                  value: values.value,
+                              }),
                     authorizer: authorizer,
                     tid: tid,
                 },
@@ -360,9 +371,8 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
                         value: action === 'punish' ? 87600 : 1,
                         tid: tid || '',
                         authorizer: authorizer || '',
-                        reason:
-                            action === 'punish' ? gLang('admin.ticketFastActionKai') : reason || '',
-                        type: action === 'punish' ? 'ban' : '',
+                        reason: action === 'punish' ? gLang('admin.ticketFastActionKai') : '',
+                        type: action === 'punish' ? 'hack' : '',
                         time: '',
                     }}
                 >
@@ -378,11 +388,7 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
                         <Input value={action ? gLang(`ticketShortcut.${action}`) : ''} disabled />
                     </Form.Item>
 
-                    {/* 警告和监管类型不显示时间输入框 */}
-                    {!(
-                        action === 'punish' &&
-                        (punishType === 'warn' || punishType === 'overwatch')
-                    ) && (
+                    {showsValueInput && (
                         <Form.Item
                             name="value"
                             label={
@@ -462,6 +468,12 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
                                     <Select.Option value="mute">
                                         {gLang('ticketShortcut.muteType')}
                                     </Select.Option>
+                                    <Select.Option value="freeze_score_top">
+                                        {gLang('ticketShortcut.freezeScoreTopType')}
+                                    </Select.Option>
+                                    <Select.Option value="restrict_nick">
+                                        {gLang('ticketShortcut.restrictNickType')}
+                                    </Select.Option>
                                     <Select.Option value="warn">
                                         {gLang('ticketShortcut.warnType')}
                                     </Select.Option>
@@ -470,24 +482,27 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
                                     </Select.Option>
                                 </Select>
                             </Form.Item>
-                            <Form.Item
-                                name="reason"
-                                label={gLang('ticketShortcut.reason')}
-                                rules={[
-                                    {
-                                        required: true,
-                                        message: gLang('ticketShortcut.enterReason'),
-                                    },
-                                ]}
-                            >
-                                <Input.TextArea
-                                    placeholder={gLang('ticketShortcut.enterReason')}
-                                    rows={3}
-                                    maxLength={200}
-                                    showCount
-                                />
-                            </Form.Item>
                         </>
+                    )}
+
+                    {requiresReason && (
+                        <Form.Item
+                            name="reason"
+                            label={gLang('ticketShortcut.reason')}
+                            rules={[
+                                {
+                                    required: true,
+                                    message: gLang('ticketShortcut.enterReason'),
+                                },
+                            ]}
+                        >
+                            <Input.TextArea
+                                placeholder={gLang('ticketShortcut.enterReason')}
+                                rows={3}
+                                maxLength={200}
+                                showCount
+                            />
+                        </Form.Item>
                     )}
                 </Form>
             </Modal>

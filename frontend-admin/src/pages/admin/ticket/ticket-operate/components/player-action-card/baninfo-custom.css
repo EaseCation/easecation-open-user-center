@@ -44,6 +44,13 @@
     color: #fa541c !important;
 }
 
+.ban-alert-geekblue {
+    background: #f0f5ff !important;
+    border-radius: 8px !important;
+    border: 1px solid #adc6ff !important;
+    color: #1d39c4 !important;
+}
+
 .ban-alert-icon {
     display: flex;
     align-items: center;
@@ -87,6 +94,12 @@
         background: #2a0a0a !important;
         border: 1px solid #d4380d !important;
         color: #ff7a45 !important;
+    }
+
+    .ban-alert-geekblue {
+        background: #0a1a40 !important;
+        border: 1px solid #1d39c4 !important;
+        color: #85a5ff !important;
     }
 }
 
@@ -137,6 +150,14 @@ html[data-theme='dark'] .ban-alert-volcano {
     background: #2a0a0a !important;
     border: 1px solid #d4380d !important;
     color: #ff7a45 !important;
+}
+
+.ant-layout-dark .ban-alert-geekblue,
+body.dark-mode .ban-alert-geekblue,
+html[data-theme='dark'] .ban-alert-geekblue {
+    background: #0a1a40 !important;
+    border: 1px solid #1d39c4 !important;
+    color: #85a5ff !important;
 }
 
 /* 禁言标签白天模式适配 */

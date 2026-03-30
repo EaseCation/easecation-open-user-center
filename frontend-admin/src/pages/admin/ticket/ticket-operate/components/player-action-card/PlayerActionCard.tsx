@@ -14,6 +14,7 @@ import { getGlobalMessageApi } from '@common/utils/messageApiHolder';
 interface PlayerActionCardProps {
     ecid: string;
     playerType: string;
+    ticketType?: string;
     shortcuts: StaffShortcut[];
     windowWidth: number;
     onPreview: (ecid: string, defaultTab?: string, initialSettings?: unknown) => void;
@@ -30,6 +31,7 @@ interface PlayerActionCardProps {
 export const PlayerActionCard: React.FC<PlayerActionCardProps> = ({
     ecid,
     playerType,
+    ticketType,
     shortcuts,
     windowWidth,
     onPreview,
@@ -68,6 +70,11 @@ export const PlayerActionCard: React.FC<PlayerActionCardProps> = ({
     }, [userRole]); // 依赖项包括 userRole
 
     // 无头像样式，角色通过 Tag 展示
+    const canUseAppealSelfReleaseActions =
+        userRole === 'initiator' && ['AG', 'OT', 'RS'].includes(ticketType || '');
+    const canUseOtClearBanDegreeAction = userRole === 'initiator' && ticketType === 'OT';
+    const canUseTransferToHackAction =
+        userRole === 'initiator' && ['AG', 'OT'].includes(ticketType || '');
 
     // 普通快捷操作按钮
     const shortcutButtons = shortcuts.map(sc => (
@@ -129,12 +136,72 @@ export const PlayerActionCard: React.FC<PlayerActionCardProps> = ({
                       size="small"
                       key="unban_gift"
                       onClick={() => {
-                          setAction('unban');
+                          setAction('unban_gift');
                           setFastActionVisible(true);
                       }}
                   >
                       {gLang('ticketShortcut.unban_gift')}
                   </Button>,
+                  ...(canUseAppealSelfReleaseActions
+                      ? [
+                            <Button
+                                block={windowWidth < 480}
+                                type="default"
+                                size="small"
+                                key="unban"
+                                onClick={() => {
+                                    setAction('unban');
+                                    setFastActionVisible(true);
+                                }}
+                            >
+                                {gLang('ticketShortcut.unban')}
+                            </Button>,
+                            <Button
+                                block={windowWidth < 480}
+                                type="default"
+                                size="small"
+                                key="unmute"
+                                onClick={() => {
+                                    setAction('unmute');
+                                    setFastActionVisible(true);
+                                }}
+                            >
+                                {gLang('ticketShortcut.unmute')}
+                            </Button>,
+                        ]
+                      : []),
+                  ...(canUseTransferToHackAction
+                      ? [
+                            <Button
+                                block={windowWidth < 480}
+                                type="default"
+                                size="small"
+                                key="transfer_to_hack"
+                                onClick={() => {
+                                    setAction('transfer_to_hack');
+                                    setFastActionVisible(true);
+                                }}
+                            >
+                                {gLang('ticketShortcut.transfer_to_hack')}
+                            </Button>,
+                        ]
+                      : []),
+                  ...(canUseOtClearBanDegreeAction
+                      ? [
+                            <Button
+                                block={windowWidth < 480}
+                                type="default"
+                                size="small"
+                                key="clearbandegree"
+                                onClick={() => {
+                                    setAction('clearbandegree');
+                                    setFastActionVisible(true);
+                                }}
+                            >
+                                {gLang('ticketShortcut.clearbandegree')}
+                            </Button>,
+                        ]
+                      : []),
               ];
 
     return (

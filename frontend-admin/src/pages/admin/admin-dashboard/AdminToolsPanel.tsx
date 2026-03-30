@@ -5,6 +5,7 @@ import { Button, Col, Input, Modal, Row, Space, Typography, Select } from 'antd'
 import { SearchOutlined } from '@ant-design/icons';
 import useIsPC from '@common/hooks/useIsPC';
 import { gLang } from '@common/language';
+import { isValidOpenid } from '@common/utils/openidUtils';
 import AdminToolCard from '../components/AdminToolCard';
 import OpenIDPanel from '../ticket/ticket-operate/components/openid-panel/OpenIDPanel';
 import type { MessageInstance } from 'antd/es/message/interface';
@@ -35,14 +36,10 @@ const AdminToolsPanel: React.FC<Props> = ({
     // 智能判断是否为工单号（4-6位数字）
     const isTicketId = useMemo(() => /^\d{4,6}$/.test(query.trim()), [query]);
 
-    // 智能判断是否为openid（支持两种格式：o开头18字符 或 NexaId_开头+数字）
+    // 智能判断是否为openid
     const isOpenId = useMemo(() => {
         const trimmed = query.trim();
-        // 格式1: o开头，后面跟着字母数字下划线连字符，长度至少18字符
-        const format1 = /^o[A-Za-z0-9_-]{17,}$/.test(trimmed);
-        // 格式2: NexaId_开头+数字
-        const format2 = /^NexaId_\d+$/.test(trimmed);
-        return format1 || format2;
+        return isValidOpenid(trimmed);
     }, [query]);
 
     const handleSubmit = () => {

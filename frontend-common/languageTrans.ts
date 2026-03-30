@@ -69,6 +69,10 @@ export const ltransBanColor = (type: string) => {
             return 'ban-alert-cyan';
         case 'PARKOUR':
             return 'ban-alert-blue';
+        case 'FREEZE_SCORE_TOP':
+            return 'ban-alert-pink';
+        case 'RESTRICT_NICK':
+            return 'ban-alert-geekblue';
         default:
             return 'blue';
     }

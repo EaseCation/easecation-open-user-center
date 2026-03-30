@@ -12,7 +12,7 @@ function readFromStorage(key: string): Partial<FeedbackFiltersState> | null {
     }
 }
 
-export type FeedbackSortBy = 'createTime' | 'lastReplyTime' | 'heat';
+export type FeedbackSortBy = 'createTime' | 'lastReplyTime' | 'heat' | 'completeTime';
 export type FeedbackOrder = 'asc' | 'desc';
 
 export interface FeedbackFiltersState {

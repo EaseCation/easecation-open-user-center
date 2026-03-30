@@ -107,6 +107,7 @@ export const GAME_MODES = [
     { key: 'battle_wall', name: '战墙' },
     { key: 'deep_chaos', name: '深井大乱斗' },
     // 休闲类游戏
+    { key: 'disasters', name: '灾难' },
     { key: 'escape_room', name: '密室杀手' },
     { key: 'color_blind_party', name: '色盲派对' },
     { key: 'steve_vs_zombie', name: '史蒂夫大战僵尸' },
@@ -120,4 +121,31 @@ export const GAME_MODES = [
     { key: 'collapse_parkour', name: '塌方跑酷' },
     { key: 'catch_them', name: '快接住它们' },
     { key: 'dig_deathmatch', name: '掘一死战' },
+];
+
+// RP 工单违规类型选项
+export const RP_VIOLATION_CATEGORIES = [
+    { key: 'cheat', name: '使用第三方辅助程序' },
+    { key: 'teaming', name: '非法合作' },
+    { key: 'abuse', name: '言语违规' },
+    { key: 'exploit', name: '利用游戏漏洞' },
+    { key: 'griefing', name: '消极游戏/破坏体验' },
+    { key: 'other', name: '其他' },
+];
+
+// RP 工单疑似作弊功能选项（仅在违规类型=使用第三方辅助程序时显示）
+export const RP_CHEAT_SIGNALS = [
+    { key: 'killaura', name: '杀戮光环' },
+    { key: 'antiknockback', name: '防击退' },
+    { key: 'flight', name: '飞行' },
+    { key: 'speed', name: '移速异常' },
+    { key: 'xray', name: '透视' },
+    { key: 'scaffold', name: '自动搭桥' },
+];
+
+// RP 工单证据类型选项
+export const RP_EVIDENCE_TYPES = [
+    { key: 'replay', name: '游戏回放号' },
+    { key: 'video', name: '外部视频链接' },
+    { key: 'attachment', name: '下方附件' },
 ];

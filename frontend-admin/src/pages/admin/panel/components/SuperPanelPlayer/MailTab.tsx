@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Descriptions, Space, Spin, Typography } from 'antd';
+import { Button, Card, Descriptions, Popconfirm, Space, Spin, Typography } from 'antd';
 import { gLang } from '@common/language';
 import { convertUTCToFormat } from '@common/components/TimeConverter';
 
@@ -8,14 +8,29 @@ const { Title, Text } = Typography;
 interface MailTabProps {
     playerMailHistory: any[] | undefined;
     spinningMail: boolean;
+    onDeleteMail?: (idmail: number) => Promise<void>;
 }
 
-export const MailTab: React.FC<MailTabProps> = ({ playerMailHistory, spinningMail }) => (
+export const MailTab: React.FC<MailTabProps> = ({ playerMailHistory, spinningMail, onDeleteMail }) => (
     <Spin spinning={spinningMail}>
         <Space orientation="vertical" style={{ width: '100%' }}>
             <Title level={5}>{gLang('superPanel.title.mail')}</Title>
             {playerMailHistory?.map(mail => (
-                <Card key={mail.idmail}>
+                <Card
+                    key={mail.idmail}
+                    extra={
+                        !mail.readtime && onDeleteMail ? (
+                            <Popconfirm
+                                title={gLang('admin.deleteMailConfirm')}
+                                onConfirm={() => onDeleteMail(mail.idmail)}
+                                okText={gLang('admin.banYes')}
+                                cancelText={gLang('admin.banNo')}
+                            >
+                                <Button size="small" danger>{gLang('admin.deleteMail')}</Button>
+                            </Popconfirm>
+                        ) : null
+                    }
+                >
                     <Text disabled>
                         #{mail.idmail} @{' '}
                         {mail.readtime

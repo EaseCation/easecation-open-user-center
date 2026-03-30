@@ -148,7 +148,8 @@ const TicketQuery: React.FC<TicketQueryProps> = ({ type }) => {
         ]
     );
 
-    useEffect(() => {
+    // 手动触发查询（点击查询按钮或按 Enter）
+    const handleSearch = useCallback(() => {
         setSpinning(true);
         setLoadingMore(false);
         setTickets([]);
@@ -156,19 +157,12 @@ const TicketQuery: React.FC<TicketQueryProps> = ({ type }) => {
         setHasMore(false);
         setTotal(0);
         query(1);
-    }, [
-        types,
-        status,
-        priority,
-        advisorUid,
-        searchKeyword,
-        searchTitle,
-        searchDetails,
-        useRegex,
-        createdAtRange,
-        sortBy,
-        query,
-    ]);
+    }, [query]);
+
+    // 初始加载
+    useEffect(() => {
+        handleSearch();
+    }, [type]);
 
     const handleLoadMore = () => {
         if (hasMore) {
@@ -310,6 +304,9 @@ const TicketQuery: React.FC<TicketQueryProps> = ({ type }) => {
                     prefix={<SortAscendingOutlined />}
                 />
 
+                <Button type="primary" onClick={handleSearch}>
+                    {gLang('ticketQuery.search')}
+                </Button>
                 <Button
                     type="link"
                     onClick={toggleAdvanced}
@@ -348,7 +345,7 @@ const TicketQuery: React.FC<TicketQueryProps> = ({ type }) => {
                                 allowClear
                                 value={searchKeyword}
                                 onChange={e => setSearchKeyword(e.target.value)}
-                                onSearch={() => query(1)}
+                                onSearch={handleSearch}
                                 style={{ flex: 1 }}
                                 prefix={<SearchOutlined />}
                             />

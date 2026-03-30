@@ -35,8 +35,7 @@ const PlayerDetailPunishInfo: React.FC<Props> = ({
         }
         return (
             player.ban_data &&
-            player.ban_data.dateexpire &&
-            new Date(player.ban_data.dateexpire).getTime() > Date.now()
+            (!player.ban_data.dateexpire || new Date(player.ban_data.dateexpire).getTime() > Date.now())
         );
     };
 
@@ -115,6 +114,10 @@ const PlayerDetailPunishInfo: React.FC<Props> = ({
                     return 'info';
                 case 'OVERWATCH':
                     return 'warning';
+                case 'FREEZE_SCORE_TOP':
+                    return 'info';
+                case 'RESTRICT_NICK':
+                    return 'info';
                 default:
                     return 'info';
             }
@@ -136,6 +139,10 @@ const PlayerDetailPunishInfo: React.FC<Props> = ({
                     return 'ban-alert-blue';
                 case 'OVERWATCH':
                     return 'ban-alert-orange';
+                case 'FREEZE_SCORE_TOP':
+                    return 'ban-alert-pink';
+                case 'RESTRICT_NICK':
+                    return 'ban-alert-geekblue';
                 case 'KICK_HOMELAND_PLAYER':
                     return 'ban-alert-pink';
                 default:
@@ -156,7 +163,8 @@ const PlayerDetailPunishInfo: React.FC<Props> = ({
             | 'gold'
             | 'green'
             | 'red'
-            | 'pink' => {
+            | 'pink'
+            | 'geekblue' => {
             switch (type) {
                 case 'HACK':
                     return 'warning';
@@ -178,6 +186,10 @@ const PlayerDetailPunishInfo: React.FC<Props> = ({
                     return 'gold';
                 case 'OVERWATCH':
                     return 'warning';
+                case 'FREEZE_SCORE_TOP':
+                    return 'pink';
+                case 'RESTRICT_NICK':
+                    return 'geekblue';
                 default:
                     return 'default';
             }
@@ -212,13 +224,11 @@ const PlayerDetailPunishInfo: React.FC<Props> = ({
                                 '-'
                             )}
                         </Descriptions.Item>
-                        <Descriptions.Item label={gLang('playerDetail.item.punishEnd')}>
-                            {player?.ban_data?.dateexpire ? (
+                        {player?.ban_data?.dateexpire && (
+                            <Descriptions.Item label={gLang('playerDetail.item.punishEnd')}>
                                 <TimeConverter utcTime={player.ban_data.dateexpire} />
-                            ) : (
-                                '-'
-                            )}
-                        </Descriptions.Item>
+                            </Descriptions.Item>
+                        )}
                         <Descriptions.Item label={gLang('playerDetail.item.banReason')}>
                             {player?.ban_data?.reason}
                         </Descriptions.Item>

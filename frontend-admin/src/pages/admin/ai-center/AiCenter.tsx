@@ -1,3 +1,6 @@
+//AI中心页面组件
+//Usage: Displayed when user accesses the AI center page.
+
 import React, { useMemo } from 'react';
 import { Card, Col, Row, Space, Typography } from 'antd';
 import Wrapper from '@common/components/Wrapper/Wrapper';

@@ -294,6 +294,8 @@ export type FeedbackListItemDto = {
     lastReplyTime: string | null;
     /** 回复总条数（含主帖后的回复） */
     replyCount: number;
+    /** 完成/解决时间（仅 closed/ended 状态有值） */
+    complete_time?: string | null;
 };
 
 /** 管理端反馈列表项 */

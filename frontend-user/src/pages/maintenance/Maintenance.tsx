@@ -1,5 +1,5 @@
 // Maintenance page component
-// Usage: Displayed when maintenance mode is enabled
+// Usage: Displayed when maintenance mode is enabled.
 
 import React from 'react';
 import { Result } from 'antd';

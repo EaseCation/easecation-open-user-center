@@ -90,6 +90,7 @@ interface FeedbackFormatCardProps {
     feedbackFormatEnabled: boolean;
     setFeedbackFormatEnabled: (v: boolean) => void;
     forceShow?: boolean;
+    onFeedbackDetailLoaded?: (feedback: Feedback) => void;
 }
 
 export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
@@ -97,6 +98,7 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
     onRefresh,
     feedbackFormatEnabled,
     setFeedbackFormatEnabled,
+    onFeedbackDetailLoaded,
 }) => {
     const isDesktop = isPC();
     const navigate = useNavigate();
@@ -157,6 +159,7 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
             data: { tid: ticket.tid },
             setData: (data: Feedback) => {
                 setFeedbackDetail(data);
+                onFeedbackDetailLoaded?.(data);
             },
         })
             .catch(err => {

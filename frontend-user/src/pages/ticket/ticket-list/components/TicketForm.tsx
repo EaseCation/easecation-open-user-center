@@ -29,7 +29,12 @@ import { fetchData, submitData } from '../../../../axiosConfig';
 import { useUploadProps } from '@common/utils/uploadUtils';
 import { TicketAccount, TicketType } from '@ecuc/shared/types/ticket.types';
 import { MediaListData, MediaStatus } from '@ecuc/shared/types/media.types';
-import { GAME_MODES } from '@ecuc/shared/constants/ticket.constants';
+import {
+    GAME_MODES,
+    RP_CHEAT_SIGNALS,
+    RP_EVIDENCE_TYPES,
+    RP_VIOLATION_CATEGORIES,
+} from '@ecuc/shared/constants/ticket.constants';
 import locale from 'antd/es/date-picker/locale/zh_CN';
 import ErrorDisplay from '../../../../components/ErrorDisplay';
 import quickInsertConfig, { QuickInsertItem } from '../../../../config/quickInsert.config';
@@ -48,6 +53,46 @@ const { TextArea } = Input;
 const { Option } = Select;
 
 const SAVE_INTERVAL_MS = 5000;
+
+const findOptionName = (
+    options: Array<{ key: string; name: string }>,
+    optionKey?: string
+): string | undefined => {
+    if (!optionKey) {
+        return undefined;
+    }
+    return options.find(option => option.key === optionKey)?.name;
+};
+
+const buildRpDetails = (values: Record<string, any>): string => {
+    const violationCategoryName =
+        findOptionName(RP_VIOLATION_CATEGORIES, values.violationCategory) ?? values.violationCategory;
+    const evidenceTypeName =
+        findOptionName(RP_EVIDENCE_TYPES, values.evidenceType) ?? values.evidenceType;
+    const cheatSignalNames =
+        values.violationCategory === 'cheat' && Array.isArray(values.cheatSignals)
+        ? values.cheatSignals
+              .map((signal: string) => findOptionName(RP_CHEAT_SIGNALS, signal) ?? signal)
+              .join('、')
+        : '';
+
+    const lines = [
+        `${gLang('ticketList.rpFields.violationCategory')}: ${violationCategoryName ?? ''}`,
+        `${gLang('ticketList.rpFields.cheatSignals')}: ${cheatSignalNames || gLang('ticket.none')}`,
+        `${gLang('ticketList.rpFields.evidenceType')}: ${evidenceTypeName ?? ''}`,
+    ];
+
+    if (values.evidenceType === 'replay') {
+        lines.push(`${gLang('ticketList.rpFields.replayCode')}: ${values.replayCode ?? ''}`);
+    }
+    if (values.evidenceType === 'video') {
+        lines.push(`${gLang('ticketList.rpFields.videoUrl')}: ${values.videoUrl ?? ''}`);
+    }
+
+    lines.push(`${gLang('ticketList.rpFields.sceneSummary')}: ${values.sceneSummary ?? ''}`);
+
+    return lines.join('\n');
+};
 
 const sanitizeFormValuesForDraft = (values: Record<string, any>): Record<string, any> => {
     const sanitized: Record<string, any> = { ...values };
@@ -113,6 +158,8 @@ const TicketForm: React.FC<TicketFormProps> = ({
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState<boolean>(false);
     const [messageApi, messageContextHolder] = message.useMessage();
+    const rpViolationCategory = Form.useWatch('violationCategory', form);
+    const rpEvidenceType = Form.useWatch('evidenceType', form);
 
     // ME工单媒体账号状态检查
     const [mediaData, setMediaData] = useState<MediaListData | null>(null);
@@ -125,6 +172,8 @@ const TicketForm: React.FC<TicketFormProps> = ({
         setIsUploading
     );
     const clearedAccountRef = useRef<string | null>(null);
+    /** While true, skip persisting draft until user answers restore prompt (avoids overwriting storage with empty form). */
+    const draftResolutionPendingRef = useRef(false);
 
     // 获取媒体账号信息
     const fetchMediaData = useCallback(async () => {
@@ -225,6 +274,9 @@ const TicketForm: React.FC<TicketFormProps> = ({
                     .join('\n');
                 const detailsAll = [titleDetails, extraDetails, details].filter(Boolean).join('\n');
                 details = detailsAll;
+            }
+            if (ticketType === TicketType.ReportPlayer) {
+                details = buildRpDetails(values);
             }
             await submitData({
                 data: {
@@ -330,6 +382,7 @@ const TicketForm: React.FC<TicketFormProps> = ({
         }
         const draft = loadTicketDraft(ticketType);
         if (!draft) {
+            draftResolutionPendingRef.current = false;
             setUploadedFiles([]);
             setSelectedQuickInsert(null);
             form.setFieldsValue({ type: ticketType, files: [] });
@@ -337,39 +390,66 @@ const TicketForm: React.FC<TicketFormProps> = ({
             return;
         }
 
-        const restoredValues = restoreFormValuesFromDraft(draft.formValues);
-        const fileList = mapUploadedFilesToFileList(draft.uploadedFiles ?? []);
-        setUploadedFiles(draft.uploadedFiles ?? []);
+        draftResolutionPendingRef.current = true;
+        setUploadedFiles([]);
+        setSelectedQuickInsert(null);
+        form.setFieldsValue({ type: ticketType, files: [] });
+        applyQuickInsertAvailability();
 
-        const draftQuickInsert = draft.selectedQuickInsert ?? null;
-        const quickInsertConfigItem = draftQuickInsert
-            ? quickInsertConfig[ticketType]?.[draftQuickInsert]
-            : undefined;
+        const applyDraftToForm = () => {
+            const restoredValues = restoreFormValuesFromDraft(draft.formValues);
+            const fileList = mapUploadedFilesToFileList(draft.uploadedFiles ?? []);
+            setUploadedFiles(draft.uploadedFiles ?? []);
 
-        if (!quickInsertConfigItem) {
-            setSelectedQuickInsert(null);
-            applyQuickInsertAvailability();
-        } else {
-            setSelectedQuickInsert(draftQuickInsert);
-            applyQuickInsertAvailability(quickInsertConfigItem);
-        }
+            const draftQuickInsert = draft.selectedQuickInsert ?? null;
+            const quickInsertConfigItem = draftQuickInsert
+                ? quickInsertConfig[ticketType]?.[draftQuickInsert]
+                : undefined;
 
-        form.setFieldsValue({
-            ...restoredValues,
-            type: ticketType,
-            files: fileList,
+            if (!quickInsertConfigItem) {
+                setSelectedQuickInsert(null);
+                applyQuickInsertAvailability();
+            } else {
+                setSelectedQuickInsert(draftQuickInsert);
+                applyQuickInsertAvailability(quickInsertConfigItem);
+            }
+
+            form.setFieldsValue({
+                ...restoredValues,
+                type: ticketType,
+                files: fileList,
+            });
+        };
+
+        const instance = modal.confirm({
+            title: gLang('ticketList.draftRestorePromptTitle'),
+            content: gLang('ticketList.draftRestorePromptContent'),
+            okText: gLang('ticketList.draftRestoreOk'),
+            cancelText: gLang('ticketList.draftRestoreCancel'),
+            onOk: () => {
+                draftResolutionPendingRef.current = false;
+                applyDraftToForm();
+                messageApi.success(gLang('ticketList.draftRestored'));
+            },
+            onCancel: () => {
+                draftResolutionPendingRef.current = false;
+                clearTicketDraft(ticketType);
+            },
         });
 
-        if (draft) {
-            messageApi.success(gLang('ticketList.draftRestored'));
-        }
-    }, [ticketType, form, messageApi, applyQuickInsertAvailability]);
+        return () => {
+            instance.destroy();
+        };
+    }, [ticketType, form, messageApi, applyQuickInsertAvailability, modal]);
 
     useEffect(() => {
         if (!ticketType) {
             return;
         }
         const intervalId = window.setInterval(() => {
+            if (draftResolutionPendingRef.current) {
+                return;
+            }
             const currentValues = form.getFieldsValue(true);
             const valuesToSave = sanitizeFormValuesForDraft({
                 ...currentValues,
@@ -385,6 +465,9 @@ const TicketForm: React.FC<TicketFormProps> = ({
 
         return () => {
             window.clearInterval(intervalId);
+            if (draftResolutionPendingRef.current) {
+                return;
+            }
             const currentValues = form.getFieldsValue(true);
             const valuesToSave = sanitizeFormValuesForDraft({
                 ...currentValues,
@@ -474,6 +557,10 @@ const TicketForm: React.FC<TicketFormProps> = ({
 
         if (previousClearedAccount !== currentAccountId) {
             messageApi.warning(gLang('ticketList.accountNoLongerBound'));
+        }
+
+        if (draftResolutionPendingRef.current) {
+            return;
         }
 
         const currentValues = form.getFieldsValue(true);
@@ -826,6 +913,12 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                             'target',
                                             'targetChoose',
                                             'quickInsert',
+                                            'violationCategory',
+                                            'cheatSignals',
+                                            'evidenceType',
+                                            'replayCode',
+                                            'videoUrl',
+                                            'sceneSummary',
                                         ]);
                                     }}
                                 >
@@ -987,6 +1080,158 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                 )}
                                 {[TicketType.ReportPlayer].includes(ticketType) && (
                                     <Form.Item
+                                        name="violationCategory"
+                                        label={gLang('ticketList.rpFields.violationCategory')}
+                                        rules={[
+                                            {
+                                                required: true,
+                                                message: gLang('required'),
+                                            },
+                                        ]}
+                                    >
+                                        <Select
+                                            placeholder={gLang(
+                                                'ticketList.rpFields.violationCategoryPlaceholder'
+                                            )}
+                                            onChange={value => {
+                                                if (value !== 'cheat') {
+                                                    form.setFieldValue('cheatSignals', undefined);
+                                                }
+                                            }}
+                                        >
+                                            {RP_VIOLATION_CATEGORIES.map(item => (
+                                                <Option key={item.key} value={item.key}>
+                                                    {item.name}
+                                                </Option>
+                                            ))}
+                                        </Select>
+                                    </Form.Item>
+                                )}
+                                {[TicketType.ReportPlayer].includes(ticketType) &&
+                                    rpViolationCategory === 'cheat' && (
+                                        <Form.Item
+                                            name="cheatSignals"
+                                            label={gLang('ticketList.rpFields.cheatSignals')}
+                                            extra={gLang('ticketList.rpFields.cheatSignalsExtra')}
+                                            rules={[
+                                                {
+                                                    required: true,
+                                                    message: gLang('required'),
+                                                    type: 'array',
+                                                },
+                                            ]}
+                                        >
+                                            <Select
+                                                mode="multiple"
+                                                placeholder={gLang(
+                                                    'ticketList.rpFields.cheatSignalsPlaceholder'
+                                                )}
+                                            >
+                                                {RP_CHEAT_SIGNALS.map(item => (
+                                                    <Option key={item.key} value={item.key}>
+                                                        {item.name}
+                                                    </Option>
+                                                ))}
+                                            </Select>
+                                        </Form.Item>
+                                    )}
+                                {[TicketType.ReportPlayer].includes(ticketType) && (
+                                    <Form.Item
+                                        name="evidenceType"
+                                        label={gLang('ticketList.rpFields.evidenceType')}
+                                        rules={[
+                                            {
+                                                required: true,
+                                                message: gLang('required'),
+                                            },
+                                        ]}
+                                    >
+                                        <Select
+                                            placeholder={gLang(
+                                                'ticketList.rpFields.evidenceTypePlaceholder'
+                                            )}
+                                            onChange={value => {
+                                                if (value !== 'replay') {
+                                                    form.setFieldValue('replayCode', undefined);
+                                                }
+                                                if (value !== 'video') {
+                                                    form.setFieldValue('videoUrl', undefined);
+                                                }
+                                            }}
+                                        >
+                                            {RP_EVIDENCE_TYPES.map(item => (
+                                                <Option key={item.key} value={item.key}>
+                                                    {item.name}
+                                                </Option>
+                                            ))}
+                                        </Select>
+                                    </Form.Item>
+                                )}
+                                {[TicketType.ReportPlayer].includes(ticketType) &&
+                                    rpEvidenceType === 'replay' && (
+                                        <Form.Item
+                                            name="replayCode"
+                                            label={gLang('ticketList.rpFields.replayCode')}
+                                            rules={[
+                                                {
+                                                    required: true,
+                                                    message: gLang('required'),
+                                                },
+                                            ]}
+                                        >
+                                            <Input
+                                                placeholder={gLang(
+                                                    'ticketList.rpFields.replayCodePlaceholder'
+                                                )}
+                                            />
+                                        </Form.Item>
+                                    )}
+                                {[TicketType.ReportPlayer].includes(ticketType) &&
+                                    rpEvidenceType === 'video' && (
+                                        <Form.Item
+                                            name="videoUrl"
+                                            label={gLang('ticketList.rpFields.videoUrl')}
+                                            rules={[
+                                                {
+                                                    required: true,
+                                                    message: gLang('required'),
+                                                },
+                                                {
+                                                    type: 'url',
+                                                    message: gLang(
+                                                        'ticketList.rpFields.videoUrlInvalid'
+                                                    ),
+                                                },
+                                            ]}
+                                        >
+                                            <Input
+                                                placeholder={gLang(
+                                                    'ticketList.rpFields.videoUrlPlaceholder'
+                                                )}
+                                            />
+                                        </Form.Item>
+                                    )}
+                                {[TicketType.ReportPlayer].includes(ticketType) && (
+                                    <Form.Item
+                                        name="sceneSummary"
+                                        label={gLang('ticketList.rpFields.sceneSummary')}
+                                        rules={[
+                                            {
+                                                required: true,
+                                                message: gLang('required'),
+                                            },
+                                        ]}
+                                    >
+                                        <TextArea
+                                            placeholder={gLang(
+                                                'ticketList.rpFields.sceneSummaryPlaceholder'
+                                            )}
+                                            autoSize={{ minRows: 2 }}
+                                        />
+                                    </Form.Item>
+                                )}
+                                {[TicketType.ReportPlayer].includes(ticketType) && (
+                                    <Form.Item
                                         name="gameMode"
                                         label={gLang('ticketList.gameMode')}
                                         extra={gLang('ticketList.gameModeExtra')}
@@ -1126,20 +1371,22 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                             )}
                                     </>
                                 )}
-                                <Form.Item
-                                    name="details"
-                                    label={gLang('ticketList.remark')}
-                                    extra={gLang(`ticketList.detailsExtra.${ticketType}`)}
-                                >
-                                    <TextArea
-                                        autoSize={{ minRows: 2 }}
-                                        onChange={e => {
-                                            const textarea = e.target as HTMLTextAreaElement;
-                                            textarea.style.height = 'auto';
-                                            textarea.style.height = `${textarea.scrollHeight + 24}px`;
-                                        }}
-                                    />
-                                </Form.Item>
+                                {![TicketType.ReportPlayer].includes(ticketType) && (
+                                    <Form.Item
+                                        name="details"
+                                        label={gLang('ticketList.remark')}
+                                        extra={gLang(`ticketList.detailsExtra.${ticketType}`)}
+                                    >
+                                        <TextArea
+                                            autoSize={{ minRows: 2 }}
+                                            onChange={e => {
+                                                const textarea = e.target as HTMLTextAreaElement;
+                                                textarea.style.height = 'auto';
+                                                textarea.style.height = `${textarea.scrollHeight + 24}px`;
+                                            }}
+                                        />
+                                    </Form.Item>
+                                )}
                                 <Form.Item
                                     label={gLang('ticketList.attachments')}
                                     extra={gLang('ticketList.attachmentsExtra')}

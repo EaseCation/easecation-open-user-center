@@ -374,7 +374,14 @@ const SuperPanelPlayerComponent = ({
         {
             key: 'mail',
             label: gLang('superPanel.tab.mail'),
-            children: <MailTab playerMailHistory={playerMailHistory} spinningMail={spinningMail} />,
+            children: <MailTab
+                playerMailHistory={playerMailHistory}
+                spinningMail={spinningMail}
+                onDeleteMail={async (idmail) => {
+                    await axiosInstance.delete(`/ec/mail/${idmail}`);
+                    setPlayerMailHistory(prev => prev?.filter(m => m.idmail !== idmail));
+                }}
+            />,
         },
         {
             key: 'giftVip',

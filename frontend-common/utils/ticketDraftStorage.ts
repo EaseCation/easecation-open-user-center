@@ -20,6 +20,59 @@ const filterPayloadForCaching = (payload: TicketDraftPayload): TicketDraftPayloa
 const STORAGE_PREFIX = 'ticket_draft_';
 const COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
+/** Form keys that are not user-filled content for draft purposes */
+const DRAFT_IGNORE_FORM_KEYS = new Set(['type', 'files']);
+
+/**
+ * Whether a single form value counts as user-filled (recursive for nested objects).
+ * Attachments are not part of payload semantics here — `uploadedFiles` is cleared before checks.
+ */
+const isMeaningfulFormValue = (val: unknown): boolean => {
+    if (val == null || val === '') {
+        return false;
+    }
+    if (typeof val === 'string') {
+        return val.trim().length > 0;
+    }
+    if (typeof val === 'boolean') {
+        return val;
+    }
+    if (typeof val === 'number') {
+        return !Number.isNaN(val);
+    }
+    if (Array.isArray(val)) {
+        return val.some(item => isMeaningfulFormValue(item));
+    }
+    if (typeof val === 'object') {
+        return Object.values(val as Record<string, unknown>).some(v => isMeaningfulFormValue(v));
+    }
+    return false;
+};
+
+/**
+ * True when the draft has real user input worth persisting or restoring.
+ * Does not use attachment paths — drafts never cache attachments.
+ */
+export const isTicketDraftPayloadMeaningful = (payload: TicketDraftPayload): boolean => {
+    const quick = payload.selectedQuickInsert;
+    if (quick != null && String(quick).trim() !== '') {
+        return true;
+    }
+    const values = payload.formValues;
+    if (!values || typeof values !== 'object') {
+        return false;
+    }
+    for (const [key, val] of Object.entries(values)) {
+        if (DRAFT_IGNORE_FORM_KEYS.has(key)) {
+            continue;
+        }
+        if (isMeaningfulFormValue(val)) {
+            return true;
+        }
+    }
+    return false;
+};
+
 const isLocalStorageSupported = (): boolean => {
     if (typeof window === 'undefined') {
         return false;
@@ -79,6 +132,10 @@ export const saveTicketDraft = (ticketType: TicketType, payload: TicketDraftPayl
     const key = getStorageKey(ticketType);
     // 所有工单都不缓存附件
     const filteredPayload = filterPayloadForCaching(payload);
+    if (!isTicketDraftPayloadMeaningful(filteredPayload)) {
+        clearTicketDraft(ticketType);
+        return;
+    }
     const serialized = JSON.stringify(filteredPayload);
 
     if (storageAvailable) {
@@ -118,6 +175,10 @@ export const loadTicketDraft = (ticketType: TicketType): TicketDraftPayload | nu
         const parsed = JSON.parse(storedValue) as TicketDraftPayload;
         // 确保所有工单恢复时都不包含附件
         parsed.uploadedFiles = [];
+        if (!isTicketDraftPayloadMeaningful(parsed)) {
+            clearTicketDraft(ticketType);
+            return null;
+        }
         return parsed;
     } catch {
         clearTicketDraft(ticketType);

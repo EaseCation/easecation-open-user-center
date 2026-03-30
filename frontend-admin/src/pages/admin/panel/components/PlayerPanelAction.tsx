@@ -154,6 +154,21 @@ const PlayerPanelAction = ({
                         <Option value="clearbandegree">
                             {gLang('superPanel.actionTypeSelect.clearbandegree')}
                         </Option>
+                        <Option value="freeze_score_top">
+                            {gLang('superPanel.actionTypeSelect.freeze_score_top')}
+                        </Option>
+                        <Option value="freeze_score_top_long">
+                            {gLang('superPanel.actionTypeSelect.freeze_score_top_long')}
+                        </Option>
+                        <Option value="unfreeze_score_top">
+                            {gLang('superPanel.actionTypeSelect.unfreeze_score_top')}
+                        </Option>
+                        <Option value="restrict_nick">
+                            {gLang('superPanel.actionTypeSelect.restrict_nick')}
+                        </Option>
+                        <Option value="unrestrict_nick">
+                            {gLang('superPanel.actionTypeSelect.unrestrict_nick')}
+                        </Option>
                     </Select>
                 </Form.Item>
 
@@ -163,6 +178,8 @@ const PlayerPanelAction = ({
                     'hack',
                     'hack_long',
                     'mute',
+                    'freeze_score_top',
+                    'freeze_score_top_long',
                     'gift',
                     'gift_vip',
                     'media',
@@ -188,7 +205,7 @@ const PlayerPanelAction = ({
                             },
                         ]}
                     >
-                        {['ban', 'ban_long', 'hack', 'hack_long', 'mute'].includes(actionType) ? (
+                        {['ban', 'ban_long', 'hack', 'hack_long', 'mute', 'freeze_score_top', 'freeze_score_top_long'].includes(actionType) ? (
                             <Input
                                 style={{ width: '100%' }}
                                 placeholder={gLang('admin.panelDurationExample')}
@@ -197,6 +214,8 @@ const PlayerPanelAction = ({
                                 onBlur={() => {
                                     const hours = parseDuration(rawData);
                                     const max = ['ban', 'hack'].includes(actionType)
+                                        ? 744
+                                        : ['freeze_score_top'].includes(actionType)
                                         ? 744
                                         : 10 * 365 * 24;
                                     form.setFieldsValue({ data: Math.min(hours, max) });

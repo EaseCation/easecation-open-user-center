@@ -968,7 +968,7 @@ const AccountManagement: React.FC = () => {
                         rules={[
                             { required: true, message: gLang('ecDetail.confirmPasswordRequired') },
                             ({ getFieldValue }) => ({
-                                validator(value) {
+                                validator(_rule, value) {
                                     if (!value || getFieldValue('newPassword') === value) {
                                         return Promise.resolve();
                                     }

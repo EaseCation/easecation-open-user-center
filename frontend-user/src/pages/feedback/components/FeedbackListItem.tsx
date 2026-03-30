@@ -15,9 +15,11 @@ const { Text } = Typography;
 interface FeedbackListItemProps {
     ticket: FeedbackListItemDto;
     to: string;
+    /** 是否展示解决时间（近期解决 tab 使用） */
+    showCompleteTime?: boolean;
 }
 
-const FeedbackListItem: React.FC<FeedbackListItemProps> = ({ ticket, to }) => {
+const FeedbackListItem: React.FC<FeedbackListItemProps> = ({ ticket, to, showCompleteTime }) => {
     const { getThemeColor } = useTheme();
     const title = ticket.title.replace(/^反馈:\s*/, '');
     const lastReplyTime = ticket.lastReplyTime ?? ticket.create_time;
@@ -86,12 +88,17 @@ const FeedbackListItem: React.FC<FeedbackListItemProps> = ({ ticket, to }) => {
 
                         {/* 元信息行 */}
                         <Space wrap size="small" style={{ fontSize: 12 }}>
-                            {ticket.create_time && (
+                            {showCompleteTime && ticket.complete_time ? (
+                                <Text type="secondary">
+                                    {gLang('feedback.resolvedAt')}{' '}
+                                    {formatSmartTime(ticket.complete_time)}
+                                </Text>
+                            ) : ticket.create_time ? (
                                 <Text type="secondary">
                                     {gLang('feedback.createdAt')}{' '}
                                     {formatSmartTime(ticket.create_time)}
                                 </Text>
-                            )}
+                            ) : null}
                             <>
                                 {ticket.create_time && <Text type="secondary">·</Text>}
                                 <Text type="secondary">

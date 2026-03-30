@@ -6,6 +6,7 @@ import { Ticket, TicketPriority, TicketStatus } from '@ecuc/shared/types/ticket.
 import { TICKET_TYPE_NAME_MAP } from '@ecuc/shared/constants/ticket.constants';
 import dayjs from 'dayjs';
 import useIsPC from '@common/hooks/useIsPC';
+import { TimeConverter } from '@common/components/TimeConverter';
 
 const { Text } = Typography;
 
@@ -40,6 +41,7 @@ const SeniorUnassignedTicketsModal: React.FC<Props> = ({ open, onCancel }) => {
                             status: [TicketStatus.WaitingAssign],
                             priority: TicketPriority.Upgrade,
                             sortBy: 'tidDesc',
+                            notType: ['MB', 'MA', 'AB', 'MM', 'MU', 'ME', 'WB']
                         },
                     });
 
@@ -55,13 +57,7 @@ const SeniorUnassignedTicketsModal: React.FC<Props> = ({ open, onCancel }) => {
                     page += 1;
                 } while (hasMore && page <= MAX_PAGES);
 
-                setTickets(
-                    all.filter(
-                        ticket =>
-                            ticket.status === TicketStatus.WaitingAssign &&
-                            ticket.priority === TicketPriority.Upgrade
-                    )
-                );
+                setTickets(all);
             } catch {
                 setTickets([]);
             } finally {
@@ -118,7 +114,11 @@ const SeniorUnassignedTicketsModal: React.FC<Props> = ({ open, onCancel }) => {
                 <Table<Ticket>
                     rowKey="tid"
                     dataSource={tickets}
-                    pagination={{ pageSize: 12 }}
+                    pagination={{
+                        pageSize: 12,
+                        showSizeChanger: false,
+                        showTotal: () => gLang('adminMain.seniorUnassignedModal.total', { total: tickets.length })
+                    }}
                     scroll={{ x: 'max-content' }}
                     size={isPC ? 'middle' : 'small'}
                     columns={[
@@ -184,6 +184,7 @@ const SeniorUnassignedTicketsModal: React.FC<Props> = ({ open, onCancel }) => {
                             },
                             sorter: (a, b) =>
                                 dayjs(a.create_time).valueOf() - dayjs(b.create_time).valueOf(),
+                            render: (create_time: string) => <TimeConverter utcTime={create_time} />,
                         },
                     ]}
                 />

@@ -28,6 +28,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { gLang } from '@common/language';
 import Wrapper from '@common/components/Wrapper/Wrapper';
 import FeedbackListItem from './components/FeedbackListItem';
+import FeedbackDateGroupedList from './components/FeedbackDateGroupedList';
 import { FeedbackListItemDto } from '@ecuc/shared/types/ticket.types';
 import { fetchData } from '@common/axiosConfig';
 import usePageTitle from '@common/hooks/usePageTitle';
@@ -36,6 +37,8 @@ import { useFeedbackFilters } from '@common/hooks/useFeedbackFilters';
 import { FeedbackListLayout } from '@common/components/FeedbackListLayout';
 import FeedbackSettingsModal from './components/FeedbackSettingsModal';
 import FeedbackTagSelect from '@common/components/Feedback/FeedbackTagSelect';
+
+type FeedbackTab = 'recentlySolved' | 'hotChat';
 
 const { useBreakpoint } = Grid;
 const { Text, Title } = Typography;
@@ -51,8 +54,31 @@ const Feedback: React.FC = () => {
     const isMobile = !screens.md;
     const { getThemeColor } = useTheme();
 
-    // 使用共享的筛选 Hook
-    const filters = useFeedbackFilters({ pageSize: 20, storageKey: STORAGE_KEY });
+    // Tab 状态 - 从 sessionStorage 恢复
+    const [activeTab, setActiveTab] = useState<FeedbackTab>(() => {
+        try {
+            const stored = sessionStorage.getItem(`${STORAGE_KEY}_tab`);
+            if (stored === 'hotChat') return 'hotChat';
+        } catch { /* ignore */ }
+        return 'recentlySolved';
+    });
+
+    // 持久化 tab 状态
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(`${STORAGE_KEY}_tab`, activeTab);
+        } catch { /* ignore */ }
+    }, [activeTab]);
+
+    // 使用共享的筛选 Hook - 初始值根据 tab 设置
+    const filters = useFeedbackFilters({
+        pageSize: 20,
+        storageKey: STORAGE_KEY,
+        initialFilters:
+            activeTab === 'recentlySolved'
+                ? { filterStatus: 'ended', sortBy: 'completeTime', order: 'desc' }
+                : { filterStatus: ['open', 'closed'], sortBy: 'heat', order: 'desc' },
+    });
     const {
         publicTagIds,
         filterType,
@@ -119,12 +145,12 @@ const Feedback: React.FC = () => {
         (
             isInitialLoad = false,
             overrides?: {
-                sortBy?: 'createTime' | 'lastReplyTime' | 'heat';
+                sortBy?: 'createTime' | 'lastReplyTime' | 'heat' | 'completeTime';
                 order?: 'asc' | 'desc';
                 page?: number;
                 publicTagIds?: number[];
                 filterType?: string;
-                filterStatus?: string;
+                filterStatus?: string | string[];
                 /** 关键词搜索（服务端搜索全部数据后分页） */
                 keyword?: string;
             }
@@ -156,7 +182,13 @@ const Feedback: React.FC = () => {
             if (nextPublicTagIds != null && nextPublicTagIds.length > 0)
                 params.publicTagIds = nextPublicTagIds;
             if (type != null && type !== '') params.type = type;
-            if (status != null && status !== '') params.status = status;
+            if (status != null) {
+                if (Array.isArray(status) && status.length > 0) {
+                    params.status = status;
+                } else if (typeof status === 'string' && status !== '') {
+                    params.status = status;
+                }
+            }
             if (keyword != null && keyword !== '') params.keyword = keyword;
 
             fetchData({
@@ -175,6 +207,36 @@ const Feedback: React.FC = () => {
             });
         },
         [sortBy, order, page, publicTagIds, filterType, filterStatus, pageSize, searchValue]
+    );
+
+    // Tab 切换处理
+    const handleTabChange = useCallback(
+        (tab: FeedbackTab) => {
+            setActiveTab(tab);
+            setPage(1);
+            if (tab === 'recentlySolved') {
+                setFilterStatus('ended');
+                setSortBy('completeTime');
+                setOrder('desc');
+                loadList(false, {
+                    filterStatus: 'ended',
+                    sortBy: 'completeTime',
+                    order: 'desc',
+                    page: 1,
+                });
+            } else {
+                setFilterStatus(['open', 'closed']);
+                setSortBy('heat');
+                setOrder('desc');
+                loadList(false, {
+                    filterStatus: ['open', 'closed'],
+                    sortBy: 'heat',
+                    order: 'desc',
+                    page: 1,
+                });
+            }
+        },
+        [loadList, setPage, setFilterStatus, setSortBy, setOrder]
     );
 
     // 搜索关键词防抖：输入后 300ms 请求服务端搜索全部数据（跳过首次挂载，避免与 loadList(true) 重复）
@@ -301,6 +363,26 @@ const Feedback: React.FC = () => {
                                 </Text>
                             </div>
                         )}
+                    </div>
+
+                    {/* Tab 切换 */}
+                    <div style={animationStyle(0.5)}>
+                        <Segmented
+                            options={[
+                                {
+                                    label: `✅ ${gLang('feedback.tabRecentlySolved')}`,
+                                    value: 'recentlySolved',
+                                },
+                                {
+                                    label: `🔥 ${gLang('feedback.tabHotChat')}`,
+                                    value: 'hotChat',
+                                },
+                            ]}
+                            value={activeTab}
+                            onChange={v => handleTabChange(v as FeedbackTab)}
+                            block
+                            size="large"
+                        />
                     </div>
 
                     {/* 顶部操作栏 - 响应式布局 */}
@@ -490,52 +572,52 @@ const Feedback: React.FC = () => {
                                                     />
                                                 </div>
 
-                                                {/* 状态筛选 */}
-                                                <div>
-                                                    <Text
-                                                        type="secondary"
-                                                        style={{
-                                                            fontSize: 12,
-                                                            marginBottom: 8,
-                                                            display: 'block',
-                                                        }}
-                                                    >
-                                                        {gLang('feedback.filterStatus')}
-                                                    </Text>
-                                                    <Segmented
-                                                        options={[
-                                                            {
-                                                                label: gLang('feedback.allStatus'),
-                                                                value: '',
-                                                            },
-                                                            {
-                                                                label: gLang(
-                                                                    'feedback.status.open'
-                                                                ),
-                                                                value: 'open',
-                                                            },
-                                                            {
-                                                                label: gLang(
-                                                                    'feedback.status.closed'
-                                                                ),
-                                                                value: 'closed',
-                                                            },
-                                                            {
-                                                                label: gLang(
-                                                                    'feedback.status.ended'
-                                                                ),
-                                                                value: 'ended',
-                                                            },
-                                                        ]}
-                                                        value={filterStatus ?? ''}
-                                                        onChange={v =>
-                                                            setFilterStatus(
-                                                                v === '' ? undefined : String(v)
-                                                            )
-                                                        }
-                                                        block
-                                                    />
-                                                </div>
+                                                {/* 状态筛选 - 近期解决 tab 下隐藏 */}
+                                                {activeTab !== 'recentlySolved' && (
+                                                    <div>
+                                                        <Text
+                                                            type="secondary"
+                                                            style={{
+                                                                fontSize: 12,
+                                                                marginBottom: 8,
+                                                                display: 'block',
+                                                            }}
+                                                        >
+                                                            {gLang('feedback.filterStatus')}
+                                                        </Text>
+                                                        <Segmented
+                                                            options={[
+                                                                {
+                                                                    label: gLang('feedback.allStatus'),
+                                                                    value: '',
+                                                                },
+                                                                {
+                                                                    label: gLang(
+                                                                        'feedback.status.open'
+                                                                    ),
+                                                                    value: 'open',
+                                                                },
+                                                                {
+                                                                    label: gLang(
+                                                                        'feedback.status.closed'
+                                                                    ),
+                                                                    value: 'closed',
+                                                                },
+                                                            ]}
+                                                            value={
+                                                                Array.isArray(filterStatus)
+                                                                    ? ''
+                                                                    : (filterStatus ?? '')
+                                                            }
+                                                            onChange={v =>
+                                                                setFilterStatus(
+                                                                    v === '' ? ['open', 'closed'] : String(v)
+                                                                )
+                                                            }
+                                                            block
+                                                        />
+                                                    </div>
+                                                )}
 
                                                 {/* 排序方式 */}
                                                 <div>
@@ -551,6 +633,16 @@ const Feedback: React.FC = () => {
                                                     </Text>
                                                     <Segmented
                                                         options={[
+                                                            ...(activeTab === 'recentlySolved'
+                                                                ? [
+                                                                      {
+                                                                          label: gLang(
+                                                                              'feedback.sortCompleteTime'
+                                                                          ),
+                                                                          value: 'completeTime',
+                                                                      },
+                                                                  ]
+                                                                : []),
                                                             {
                                                                 label: gLang(
                                                                     'feedback.sortCreateTime'
@@ -656,19 +748,32 @@ const Feedback: React.FC = () => {
                                                     <Button
                                                         onClick={() => {
                                                             setFilterType(undefined);
-                                                            setFilterStatus(undefined);
                                                             setPublicTagIds(undefined);
-                                                            setSortBy('createTime');
                                                             setOrder('desc');
                                                             setPage(1);
-                                                            loadList(false, {
-                                                                filterType: undefined,
-                                                                filterStatus: undefined,
-                                                                publicTagIds: undefined,
-                                                                sortBy: 'createTime',
-                                                                order: 'desc',
-                                                                page: 1,
-                                                            });
+                                                            if (activeTab === 'recentlySolved') {
+                                                                setFilterStatus('ended');
+                                                                setSortBy('completeTime');
+                                                                loadList(false, {
+                                                                    filterType: undefined,
+                                                                    filterStatus: 'ended',
+                                                                    publicTagIds: undefined,
+                                                                    sortBy: 'completeTime',
+                                                                    order: 'desc',
+                                                                    page: 1,
+                                                                });
+                                                            } else {
+                                                                setFilterStatus(['open', 'closed']);
+                                                                setSortBy('heat');
+                                                                loadList(false, {
+                                                                    filterType: undefined,
+                                                                    filterStatus: ['open', 'closed'],
+                                                                    publicTagIds: undefined,
+                                                                    sortBy: 'heat',
+                                                                    order: 'desc',
+                                                                    page: 1,
+                                                                });
+                                                            }
                                                             setFilterDrawerOpen(false);
                                                         }}
                                                         block
@@ -759,53 +864,55 @@ const Feedback: React.FC = () => {
                                                 />
                                             </div>
 
-                                            {/* 状态 */}
-                                            <div
-                                                style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: 8,
-                                                }}
-                                            >
-                                                <Text
-                                                    type="secondary"
-                                                    style={{ fontSize: 12, whiteSpace: 'nowrap' }}
-                                                >
-                                                    {gLang('feedback.filterStatus')}
-                                                </Text>
-                                                <Segmented
-                                                    options={[
-                                                        {
-                                                            label: gLang('feedback.allStatus'),
-                                                            value: '',
-                                                        },
-                                                        {
-                                                            label: gLang('feedback.status.open'),
-                                                            value: 'open',
-                                                        },
-                                                        {
-                                                            label: gLang('feedback.status.closed'),
-                                                            value: 'closed',
-                                                        },
-                                                        {
-                                                            label: gLang('feedback.status.ended'),
-                                                            value: 'ended',
-                                                        },
-                                                    ]}
-                                                    value={filterStatus ?? ''}
-                                                    onChange={v => {
-                                                        const newStatus =
-                                                            v === '' ? undefined : String(v);
-                                                        setFilterStatus(newStatus);
-                                                        setPage(1);
-                                                        loadList(false, {
-                                                            filterStatus: newStatus,
-                                                            page: 1,
-                                                        });
+                                            {/* 状态 - 近期解决 tab 下隐藏（语义固定为 ended） */}
+                                            {activeTab !== 'recentlySolved' && (
+                                                <div
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: 8,
                                                     }}
-                                                    size="small"
-                                                />
-                                            </div>
+                                                >
+                                                    <Text
+                                                        type="secondary"
+                                                        style={{ fontSize: 12, whiteSpace: 'nowrap' }}
+                                                    >
+                                                        {gLang('feedback.filterStatus')}
+                                                    </Text>
+                                                    <Segmented
+                                                        options={[
+                                                            {
+                                                                label: gLang('feedback.allStatus'),
+                                                                value: '',
+                                                            },
+                                                            {
+                                                                label: gLang('feedback.status.open'),
+                                                                value: 'open',
+                                                            },
+                                                            {
+                                                                label: gLang('feedback.status.closed'),
+                                                                value: 'closed',
+                                                            },
+                                                        ]}
+                                                        value={
+                                                            Array.isArray(filterStatus)
+                                                                ? ''
+                                                                : (filterStatus ?? '')
+                                                        }
+                                                        onChange={v => {
+                                                            const newStatus =
+                                                                v === '' ? ['open', 'closed'] : String(v);
+                                                            setFilterStatus(newStatus);
+                                                            setPage(1);
+                                                            loadList(false, {
+                                                                filterStatus: newStatus,
+                                                                page: 1,
+                                                            });
+                                                        }}
+                                                        size="small"
+                                                    />
+                                                </div>
+                                            )}
 
                                             {/* 标签 */}
                                             <div
@@ -869,6 +976,16 @@ const Feedback: React.FC = () => {
                                                 </Text>
                                                 <Segmented
                                                     options={[
+                                                        ...(activeTab === 'recentlySolved'
+                                                            ? [
+                                                                  {
+                                                                      label: gLang(
+                                                                          'feedback.sortCompleteTime'
+                                                                      ),
+                                                                      value: 'completeTime',
+                                                                  },
+                                                              ]
+                                                            : []),
                                                         {
                                                             label: gLang('feedback.sortCreateTime'),
                                                             value: 'createTime',
@@ -889,52 +1006,22 @@ const Feedback: React.FC = () => {
                                                         const newSortBy = v as
                                                             | 'createTime'
                                                             | 'lastReplyTime'
-                                                            | 'heat';
+                                                            | 'heat'
+                                                            | 'completeTime';
                                                         setSortBy(newSortBy);
                                                         setPage(1);
-                                                        // 立即加载，使用新的 sortBy 值
-                                                        setIsListLoading(true);
-                                                        const params: Record<
-                                                            string,
-                                                            string | number | string[] | number[]
-                                                        > = {
+                                                        loadList(false, {
                                                             sortBy: newSortBy,
-                                                            order,
-                                                            page: '1',
-                                                            pageSize: String(pageSize),
-                                                        };
-                                                        if (publicTagIds?.length)
-                                                            params.publicTagIds = publicTagIds;
-                                                        if (filterType != null && filterType !== '')
-                                                            params.type = filterType;
-                                                        if (
-                                                            filterStatus != null &&
-                                                            filterStatus !== ''
-                                                        )
-                                                            params.status = filterStatus;
-                                                        fetchData({
-                                                            url: '/feedback/list',
-                                                            method: 'GET',
-                                                            data: params,
-                                                            setData: (data: {
-                                                                list?: FeedbackListItemDto[];
-                                                                total?: number;
-                                                            }) => {
-                                                                setAllTicketList(data?.list ?? []);
-                                                                setTotal(data?.total ?? 0);
-                                                                setIsListLoading(false);
-                                                            },
-                                                        }).catch(() => setIsListLoading(false));
+                                                            page: 1,
+                                                        });
                                                     }}
                                                     size="small"
                                                 />
                                             </div>
 
-                                            {/* 排序方向 - 根据排序方式显示不同文案 */}
-                                            {/* 热度: desc=从高到低(reply_count大的在前), asc=从低到高 */}
-                                            {/* 时间: desc=从新到旧(时间戳大的在前), asc=从旧到新 */}
+                                            {/* 排序方向 */}
                                             <Segmented
-                                                key={sortBy} // 强制重新渲染，避免选项改变时状态不同步
+                                                key={sortBy}
                                                 options={
                                                     sortBy === 'heat'
                                                         ? [
@@ -971,36 +1058,10 @@ const Feedback: React.FC = () => {
                                                     const newOrder = v as 'asc' | 'desc';
                                                     setOrder(newOrder);
                                                     setPage(1);
-                                                    // 立即加载，使用新的 order 值
-                                                    setIsListLoading(true);
-                                                    const params: Record<
-                                                        string,
-                                                        string | number | string[] | number[]
-                                                    > = {
-                                                        sortBy,
+                                                    loadList(false, {
                                                         order: newOrder,
-                                                        page: '1',
-                                                        pageSize: String(pageSize),
-                                                    };
-                                                    if (publicTagIds?.length)
-                                                        params.publicTagIds = publicTagIds;
-                                                    if (filterType != null && filterType !== '')
-                                                        params.type = filterType;
-                                                    if (filterStatus != null && filterStatus !== '')
-                                                        params.status = filterStatus;
-                                                    fetchData({
-                                                        url: '/feedback/list',
-                                                        method: 'GET',
-                                                        data: params,
-                                                        setData: (data: {
-                                                            list?: FeedbackListItemDto[];
-                                                            total?: number;
-                                                        }) => {
-                                                            setAllTicketList(data?.list ?? []);
-                                                            setTotal(data?.total ?? 0);
-                                                            setIsListLoading(false);
-                                                        },
-                                                    }).catch(() => setIsListLoading(false));
+                                                        page: 1,
+                                                    });
                                                 }}
                                                 size="small"
                                             />
@@ -1016,18 +1077,35 @@ const Feedback: React.FC = () => {
                         <Skeleton active paragraph={{ rows: 5 }} />
                     ) : allTicketList && allTicketList.length > 0 ? (
                         <>
-                            <FeedbackListLayout
-                                items={allTicketList}
-                                renderItem={ticket => (
-                                    <FeedbackListItem
-                                        ticket={ticket}
-                                        to={`/feedback/${ticket.tid}`}
-                                    />
-                                )}
-                                gap={12}
-                                animationDelay={animationDelay}
-                                enableAnimation={true}
-                            />
+                            {activeTab === 'recentlySolved' &&
+                            sortBy === 'completeTime' ? (
+                                <FeedbackDateGroupedList
+                                    items={allTicketList}
+                                    renderItem={ticket => (
+                                        <FeedbackListItem
+                                            ticket={ticket}
+                                            to={`/feedback/${ticket.tid}`}
+                                            showCompleteTime
+                                        />
+                                    )}
+                                    gap={12}
+                                    animationDelay={animationDelay}
+                                />
+                            ) : (
+                                <FeedbackListLayout
+                                    items={allTicketList}
+                                    renderItem={ticket => (
+                                        <FeedbackListItem
+                                            ticket={ticket}
+                                            to={`/feedback/${ticket.tid}`}
+                                            showCompleteTime={activeTab === 'recentlySolved'}
+                                        />
+                                    )}
+                                    gap={12}
+                                    animationDelay={animationDelay}
+                                    enableAnimation={true}
+                                />
+                            )}
 
                             {/* 分页组件 */}
                             {total > pageSize && (

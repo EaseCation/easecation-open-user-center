@@ -35,6 +35,12 @@ const BanInfoComponent: React.FC<BanInfoComponentProps> = ({ ban, setPreviewTid 
                 return 'ban-alert-yellow'; // 自定义样式覆盖
             case 'OVERWATCH':
                 return 'ban-alert-orange'; // 自定义样式覆盖
+            case 'FREEZE_SCORE_TOP':
+                return 'ban-alert-pink';
+            case 'RESTRICT_NICK':
+                return 'ban-alert-geekblue';
+            case 'CPS_LIMIT_TRIG':
+                return 'ban-alert-volcano';
             default:
                 if (ban.type && ban.type.startsWith('UN')) return 'success'; // UN开头返回success
                 return '';
@@ -63,6 +69,12 @@ const BanInfoComponent: React.FC<BanInfoComponentProps> = ({ ban, setPreviewTid 
                 return 'warning'; // 使用标准 warning 类型
             case 'OVERWATCH':
                 return 'info'; // 使用标准 info 类型
+            case 'FREEZE_SCORE_TOP':
+                return 'info';
+            case 'RESTRICT_NICK':
+                return 'info';
+            case 'CPS_LIMIT_TRIG':
+                return 'info';
             default:
                 if (ban.type && ban.type.startsWith('UN')) return 'success'; // UN开头返回success
                 return 'info'; // 默认返回info
@@ -93,9 +105,17 @@ const BanInfoComponent: React.FC<BanInfoComponentProps> = ({ ban, setPreviewTid 
                 return 'warning';
             case 'BAN_DEVICE':
                 return 'purple';
+            case 'FREEZE_SCORE_TOP':
+                return 'pink';
+            case 'RESTRICT_NICK':
+                return 'geekblue';
+            case 'CPS_LIMIT_TRIG':
+                return 'volcano';
             case 'UNBAN':
             case 'UNMUTE':
             case 'UNHACK':
+            case 'UNFREEZE_SCORE_TOP':
+            case 'UNRESTRICT_NICK':
                 return 'success';
             default:
                 return 'default';
@@ -130,9 +150,17 @@ const BanInfoComponent: React.FC<BanInfoComponentProps> = ({ ban, setPreviewTid 
                 return { type: 'default', style: { color: '#faad14', borderColor: '#faad14' } };
             case 'OVERWATCH':
                 return { type: 'default', style: { color: '#fa8c16', borderColor: '#fa8c16' } };
+            case 'FREEZE_SCORE_TOP':
+                return { type: 'default', style: { color: '#eb2f96', borderColor: '#eb2f96' } };
+            case 'RESTRICT_NICK':
+                return { type: 'default', style: { color: '#1d39c4', borderColor: '#1d39c4' } };
+            case 'CPS_LIMIT_TRIG':
+                return { type: 'default', style: { color: '#fa541c', borderColor: '#fa541c' } };
             case 'UNBAN':
             case 'UNMUTE':
             case 'UNHACK':
+            case 'UNFREEZE_SCORE_TOP':
+            case 'UNRESTRICT_NICK':
                 return { type: 'default', style: { color: '#52c41a', borderColor: '#52c41a' } };
             case 'KICK_HOMELAND_PLAYER':
                 return { type: 'default', style: { color: '#eb2f96', borderColor: '#eb2f96' } };
@@ -164,6 +192,8 @@ const BanInfoComponent: React.FC<BanInfoComponentProps> = ({ ban, setPreviewTid 
                             ban.type !== 'PARKOUR' &&
                             ban.type !== 'KICK' &&
                             ban.type !== 'CLEAR_SCORE' &&
+                            ban.type !== 'RESTRICT_NICK' &&
+                            ban.type !== 'CPS_LIMIT_TRIG' &&
                             !(ban.type && ban.type.startsWith('UN')) && (
                                 <>
                                     <Descriptions.Item label={gLang('superPanel.item.banHours')}>

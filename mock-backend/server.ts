@@ -980,7 +980,12 @@ app.post('/ec/action', (_req, res) => {
     res.json(ok({ message: '玩家操作执行成功(mock)' }));
 });
 
-app.post('/ec/fast-action', (_req, res) => {
+app.post('/ec/fast-action', (req, res) => {
+    const action = String(req.body?.action || '');
+    if (action === 'transfer_to_hack') {
+        res.json(ok({ message: '已将封禁转为小黑屋(mock)' }));
+        return;
+    }
     res.json(ok({ message: '快捷操作执行成功(mock)' }));
 });
 
@@ -1368,9 +1373,31 @@ app.get('/ticket/detail', (req, res) => {
 
 app.post('/ticket/new', (req, res) => {
     const type = String(req.body?.type || 'OT');
-    const title = String(req.body?.title || '新建工单(mock)');
+    const fallbackTitle = String(req.body?.title || '新建工单(mock)');
+    const title =
+        type === 'RP'
+            ? `${String(req.body?.gameMode || '未知模式')} ${String(req.body?.target || '')}`.trim()
+            : fallbackTitle;
+    const details = String(req.body?.details || '');
+    const files = Array.isArray(req.body?.files) ? req.body.files : [];
     const newTid = Math.max(...state.tickets.map(ticket => ticket.tid)) + 1;
     const newTicket = buildTicket(newTid, type, title, 'O');
+    newTicket.details = [
+        {
+            id: Date.now() % 100000,
+            tid: newTid,
+            displayTitle: '玩家',
+            action: 'R',
+            operator: MOCK_USER.openid,
+            content: details,
+            contentHtml: `<p>${details}</p>`,
+            contentHtmlUser: `<p>${details}</p>`,
+            attachments: files,
+            ip: '127.0.0.1',
+            create_time: new Date().toISOString(),
+            isOfficial: false,
+        },
+    ];
     state.tickets.unshift(newTicket);
     res.json(ok({ tid: newTid, ticket: newTicket }));
 });

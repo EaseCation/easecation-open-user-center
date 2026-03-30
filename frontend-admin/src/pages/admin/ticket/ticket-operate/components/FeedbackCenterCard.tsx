@@ -1447,7 +1447,7 @@ export const FeedbackCenterCard: React.FC<FeedbackCenterCardProps> = ({
     const tabItemsWithMatch = [
         ...matchedFeedbacks.map(matched => ({
             key: `match-${matched.tid}`,
-            label: `TID#${matched.tid} (${matched.similarity}%)`,
+            label: <span title={matched.title}>{`TID#${matched.tid} (${matched.similarity}%)`}</span>,
             children: renderMatchTab(matched),
         })),
         ...manualTabItems,

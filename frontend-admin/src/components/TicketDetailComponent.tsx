@@ -40,6 +40,7 @@ import {
 import { getMessageStyleConfig } from '@ecuc/shared/constants/system-message.constants';
 import { SystemMessageDisplay } from '@common/components/SystemMessageDisplay';
 import { generateTemporaryUrl } from '@common/utils/uploadUtils';
+import { isValidOpenid } from '@common/utils/openidUtils';
 import HTMLComponent from './HtmlComponent';
 import { ArrowUpOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { TicketDetail } from '@ecuc/shared/types/ticket.types';
@@ -69,16 +70,7 @@ const TicketDetailComponent: React.FC<{
     const [openidModalVisible, setOpenidModalVisible] = useState(false);
     const [currentOpenid, setCurrentOpenid] = useState<string>('');
 
-    // 检查是否是有效的 openid
-    const isValidOpenid = (str: string): boolean => {
-        // 格式1: o开头，后面跟着字母数字下划线连字符，长度至少18字符
-        const format1 = /^o[A-Za-z0-9_-]{17,}$/.test(str);
-        // 格式2: NexaId_开头+数字
-        const format2 = /^NexaId_\d+$/.test(str);
-        // 格式3: EC-开头（ECID格式的openid）
-        const format3 = /^EC-[A-Za-z0-9_-]+$/.test(str);
-        return format1 || format2 || format3;
-    };
+
 
     const handleOpenOpenidModal = (openid: string) => {
         setCurrentOpenid(openid);
