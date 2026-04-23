@@ -83,7 +83,7 @@ const ScoreTopCard: React.FC<ScoreTopCardProps> = ({ game, type, deadlineType, p
     const metaMutedColor = getThemeColor({
         light: '#8c8c8c',
         dark: '#bfbfbf',
-        custom: { blackOrange: palette.textMuted },
+        custom: { blackOrange: palette.textSecondary },
     });
     const listDivider = getThemeColor({
         light: '#f5f5f5',
@@ -94,24 +94,14 @@ const ScoreTopCard: React.FC<ScoreTopCardProps> = ({ game, type, deadlineType, p
     const deadlineTag = useMemo((): ReactNode => {
         const commonStyle = {
             marginRight: 0,
-            color: isBlackOrangeActive ? palette.textPrimary : undefined,
         } as const;
-
-        const sharedProps = isBlackOrangeActive
-            ? {
-                  style: {
-                      ...commonStyle,
-                      background: palette.surfaceAlt,
-                      borderColor: palette.border,
-                  },
-              }
-            : { style: commonStyle };
 
         const tagWithContent = (icon: ReactNode, label: string, fallbackColor: string) => (
             <Tag
                 icon={icon}
-                color={isBlackOrangeActive ? palette.accent : fallbackColor}
-                {...sharedProps}
+                color={fallbackColor}
+                style={commonStyle}
+                className="deadline-tag"
             >
                 <span style={{ marginLeft: -4 }}>{label}</span>
             </Tag>
@@ -134,24 +124,14 @@ const ScoreTopCard: React.FC<ScoreTopCardProps> = ({ game, type, deadlineType, p
                 return tagWithContent(<RocketOutlined />, gLang('scoreTop.deadlineForever'), 'red');
             default:
                 return (
-                    <Tag color={isBlackOrangeActive ? palette.accent : undefined} {...sharedProps}>
+                    <Tag style={commonStyle}>
                         {deadlineType}
                     </Tag>
                 );
         }
-    }, [
-        deadlineType,
-        isBlackOrangeActive,
-        palette.accent,
-        palette.border,
-        palette.surfaceAlt,
-        palette.textPrimary,
-    ]);
+    }, [deadlineType]);
 
     const getScoreTagColor = (rank: number) => {
-        if (isBlackOrangeActive) {
-            return rank === 1 ? palette.accent : palette.surfaceAlt;
-        }
         if (rank === 1) return 'red';
         if (rank === 2) return 'volcano';
         if (rank === 3) return 'blue';
@@ -172,14 +152,10 @@ const ScoreTopCard: React.FC<ScoreTopCardProps> = ({ game, type, deadlineType, p
                 <Space size="small">
                     {pc && (
                         <Tag
-                            bordered={!isBlackOrangeActive}
                             icon={<DesktopOutlined />}
-                            color={isBlackOrangeActive ? palette.accent : 'gold'}
+                            color="gold"
                             style={{
                                 marginRight: 0,
-                                color: isBlackOrangeActive ? palette.textPrimary : undefined,
-                                background: isBlackOrangeActive ? palette.surfaceAlt : undefined,
-                                borderColor: isBlackOrangeActive ? palette.border : undefined,
                             }}
                         >
                             <span style={{ marginLeft: -2 }}>PC</span>
@@ -208,17 +184,11 @@ const ScoreTopCard: React.FC<ScoreTopCardProps> = ({ game, type, deadlineType, p
                         actions={[
                             <Tag
                                 key="score"
-                                bordered={!isBlackOrangeActive}
                                 color={getScoreTagColor(item.rank)}
                                 style={{
                                     marginRight: -8,
                                     minWidth: 32,
                                     textAlign: 'center',
-                                    color: isBlackOrangeActive
-                                        ? item.rank === 1
-                                            ? palette.textPrimary
-                                            : palette.textSecondary
-                                        : undefined,
                                 }}
                             >
                                 {formatScore(item)}
@@ -245,6 +215,7 @@ const ScoreTopCard: React.FC<ScoreTopCardProps> = ({ game, type, deadlineType, p
                                             minWidth: 8,
                                             display: 'inline-block',
                                         }}
+                                        className={`rank-number ${item.rank === 1 ? 'rank-1' : item.rank === 2 ? 'rank-2' : item.rank === 3 ? 'rank-3' : ''}`}
                                     >
                                         {item.rank}
                                     </span>

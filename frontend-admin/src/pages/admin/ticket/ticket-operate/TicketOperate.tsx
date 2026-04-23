@@ -34,6 +34,7 @@ import {
 import { MEDIA_TYPES } from '@ecuc/shared/constants/media.constants';
 import { FeedbackCenterCard } from './components/FeedbackCenterCard';
 import { FeedbackFormatCard } from './components/FeedbackFormatCard';
+import LinkedRecommendationCard from './components/LinkedRecommendationCard';
 
 interface TicketOperateProps {
     tid?: string;
@@ -457,6 +458,8 @@ const TicketOperate = (props: TicketOperateProps) => {
                                           }}
                                           userRole="initiator"
                                           tid={tid}
+                                          ticketTitle={ticket?.title}
+                                          ticketDetails={ticket?.details}
                                           updateTicketDetail={updateTicketDetail}
                                       />
                                   </div>
@@ -499,6 +502,8 @@ const TicketOperate = (props: TicketOperateProps) => {
                                           }}
                                           userRole="target"
                                           tid={tid}
+                                          ticketTitle={ticket?.title}
+                                          ticketDetails={ticket?.details}
                                           updateTicketDetail={updateTicketDetail}
                                       />
                                   </div>
@@ -531,6 +536,15 @@ const TicketOperate = (props: TicketOperateProps) => {
                             <MediaMonthlyTicketsPanel ticket={ticket} />
                         </div>
                     ) : null}
+
+                    {/* 反馈关联状态卡片 */}
+                    {ticket && (
+                        <LinkedRecommendationCard
+                            tid={ticket.tid}
+                            refreshKey={ticket.details?.length}
+                            onRevoke={updateTicketDetail}
+                        />
+                    )}
 
                     {/* 反馈中心卡片（JY工单） */}
                     {((ticket && ticket.type === TicketType.Suggestion) ||

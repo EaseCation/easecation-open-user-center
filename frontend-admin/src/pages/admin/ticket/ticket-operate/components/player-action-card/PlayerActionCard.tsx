@@ -7,9 +7,11 @@ import { IdcardOutlined, EyeOutlined, UpOutlined, DownOutlined } from '@ant-desi
 import { usePlayerBasicCache } from '@common/hooks/usePlayerBasicCache';
 import PlayerDetailPunishInfo from './PlayerDetailPunishInfo';
 import { StaffShortcut } from '@ecuc/shared/types/player.types';
+import { TicketAction, TicketDetail } from '@ecuc/shared/types/ticket.types';
 import { gLang } from '@common/language';
 import FastActionModal from '../../TicketFastActionModal';
 import { getGlobalMessageApi } from '@common/utils/messageApiHolder';
+import PunishCopyMailModal from './PunishCopyMailModal';
 
 interface PlayerActionCardProps {
     ecid: string;
@@ -25,6 +27,8 @@ interface PlayerActionCardProps {
      */
     userRole: 'target' | 'initiator';
     tid?: string;
+    ticketTitle?: string;
+    ticketDetails?: TicketDetail[];
     updateTicketDetail?: () => Promise<void>;
 }
 
@@ -37,9 +41,12 @@ export const PlayerActionCard: React.FC<PlayerActionCardProps> = ({
     onPreview,
     userRole,
     tid,
+    ticketTitle,
+    ticketDetails,
     updateTicketDetail,
 }) => {
     const [fastActionVisible, setFastActionVisible] = useState(false);
+    const [copyMailVisible, setCopyMailVisible] = useState(false);
     const [action, setAction] = useState<string | undefined>('');
     const [collapsed, setCollapsed] = useState(false);
 
@@ -74,7 +81,22 @@ export const PlayerActionCard: React.FC<PlayerActionCardProps> = ({
         userRole === 'initiator' && ['AG', 'OT', 'RS'].includes(ticketType || '');
     const canUseOtClearBanDegreeAction = userRole === 'initiator' && ticketType === 'OT';
     const canUseTransferToHackAction =
-        userRole === 'initiator' && ['AG', 'OT'].includes(ticketType || '');
+        (ticketType === 'AG' && userRole === 'initiator') ||
+        (ticketType === 'OT' && (userRole === 'initiator' || userRole === 'target'));
+    const hasTicketPunishment = Boolean(
+        ticketDetails?.some(detail => {
+            const content = detail.content || '';
+            const bySystem = detail.operator === 'SYSTEM' && detail.action === TicketAction.Reply;
+            const byStaffAction =
+                detail.operator.startsWith('AUTH_UID_') || detail.action === TicketAction.Note;
+            if (!bySystem && !byStaffAction) return false;
+            return /(处罚|禁言|封禁|小黑屋|hack|mute|warning|ban|已处罚|违规行为警告)/i.test(
+                content
+            );
+        })
+    );
+    const canCopyPunishMail =
+        userRole === 'target' && ticketType === 'RP' && hasTicketPunishment && Boolean(ecid);
 
     // 普通快捷操作按钮
     const shortcutButtons = shortcuts.map(sc => (
@@ -104,6 +126,36 @@ export const PlayerActionCard: React.FC<PlayerActionCardProps> = ({
                   >
                       {gLang('ticketShortcut.punish')}
                   </Button>,
+                  <Button
+                      block={windowWidth < 480}
+                      size="small"
+                      key="punish_copy"
+                      onClick={() => setCopyMailVisible(true)}
+                      disabled={!canCopyPunishMail}
+                      title={
+                          canCopyPunishMail
+                              ? undefined
+                              : gLang('admin.punishCopyMail.disabledHint')
+                      }
+                  >
+                      {gLang('admin.punishCopyMail.copyButton')}
+                  </Button>,
+                  ...(canUseTransferToHackAction
+                      ? [
+                            <Button
+                                block={windowWidth < 480}
+                                type="default"
+                                size="small"
+                                key="transfer_to_hack"
+                                onClick={() => {
+                                    setAction('transfer_to_hack');
+                                    setFastActionVisible(true);
+                                }}
+                            >
+                                {gLang('ticketShortcut.transfer_to_hack')}
+                            </Button>,
+                        ]
+                      : []),
               ]
             : [
                   <Button
@@ -343,6 +395,15 @@ export const PlayerActionCard: React.FC<PlayerActionCardProps> = ({
                 tid={tid}
                 authorizer={`TID_${tid}`}
                 updateTicketDetail={updateTicketDetail}
+            />
+            <PunishCopyMailModal
+                open={copyMailVisible}
+                onClose={() => setCopyMailVisible(false)}
+                tid={tid}
+                reportedEcid={ecid}
+                ticketTitle={ticketTitle}
+                ticketDetails={ticketDetails}
+                currentBanData={player?.ban_data}
             />
         </Card>
     );

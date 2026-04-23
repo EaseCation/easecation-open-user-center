@@ -114,6 +114,7 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
     const [jiraModalOpen, setJiraModalOpen] = useState(false);
     const [advancedModalOpen, setAdvancedModalOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [metaRefreshSignal, setMetaRefreshSignal] = useState(0);
     const [filterType, setFilterType] = useState<'all' | 'official'>('all');
     const [replyAsNote, setReplyAsNote] = useState(false);
     const [replyIdentity, setReplyIdentityState] =
@@ -173,6 +174,7 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
         try {
             await (onRefresh?.() as unknown as Promise<void>);
             loadFeedbackDetail();
+            setMetaRefreshSignal(prev => prev + 1);
         } finally {
             setRefreshing(false);
         }
@@ -536,6 +538,7 @@ export const FeedbackFormatCard: React.FC<FeedbackFormatCardProps> = ({
                     <FeedbackMetaPanel
                         tid={ticket.tid}
                         currentStatus={ticket.status}
+                        refreshSignal={metaRefreshSignal}
                         onSaved={() => {
                             onRefresh?.();
                             loadFeedbackDetail();

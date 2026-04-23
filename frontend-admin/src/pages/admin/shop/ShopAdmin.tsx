@@ -18,11 +18,19 @@ import { fetchData } from '@common/axiosConfig';
 import { gLang } from '@common/language';
 import AddProductModal from './components/AddProductModal';
 import EditProductModal from './components/EditProductModal';
+import type { SpinRewardProductOption } from './components/ProductFormModal';
 import ProductGrid from './components/ProductGrid';
 import ProductCard from './components/ProductCard';
 import ProductToolbar from './components/ProductToolbar';
 import { CATEGORY_NAME_MAP } from '@ecuc/shared/constants/shop.constants';
 import type { WeeklyStatsResponse } from '@ecuc/shared/types';
+import type {
+    PricingMode,
+    ProductExtraConfig,
+    ProductMode,
+    SpinLotteryReward,
+} from '@ecuc/shared/types/item.types';
+import dayjs, { Dayjs } from 'dayjs';
 
 const { Title, Paragraph } = Typography;
 // 移除本地 Search，统一使用 ProductToolbar 的搜索
@@ -41,6 +49,8 @@ interface Product {
     current_month_sales: number;
     sales: number;
     is_hidden?: number;
+    base_price?: number;
+    extra_config?: ProductExtraConfig | null;
 }
 
 type ProductJson = {
@@ -60,6 +70,22 @@ interface UpdateFormValues {
     global_limit: number | null;
     permanent_limit: number | null;
     is_hidden?: number;
+    homepage_featured?: boolean;
+    product_mode?: ProductMode;
+    draw_at?: Dayjs;
+    winner_count?: number;
+    pricing_mode?: PricingMode;
+    sales_threshold?: number;
+    sales_step_percent?: number;
+    weekend_markup_percent?: number;
+    weekday_night_markup_percent?: number;
+    min_adjustment_percent?: number;
+    max_adjustment_percent?: number;
+    high_price?: number;
+    low_price?: number;
+    spin_chance_per_share?: number;
+    spin_daily_share_limit?: number;
+    spin_rewards?: Array<Partial<SpinLotteryReward>>;
 }
 
 interface AddFormValues {
@@ -75,6 +101,22 @@ interface AddFormValues {
     global_limit: number | null;
     permanent_limit: number | null;
     is_hidden?: number;
+    homepage_featured?: boolean;
+    product_mode?: ProductMode;
+    draw_at?: Dayjs;
+    winner_count?: number;
+    pricing_mode?: PricingMode;
+    sales_threshold?: number;
+    sales_step_percent?: number;
+    weekend_markup_percent?: number;
+    weekday_night_markup_percent?: number;
+    min_adjustment_percent?: number;
+    max_adjustment_percent?: number;
+    high_price?: number;
+    low_price?: number;
+    spin_chance_per_share?: number;
+    spin_daily_share_limit?: number;
+    spin_rewards?: Array<Partial<SpinLotteryReward>>;
 }
 
 export type { AddFormValues };
@@ -186,6 +228,67 @@ export default function ProductManagementPage() {
         }
     };
 
+    const buildExtraConfig = (
+        values: AddFormValues | UpdateFormValues,
+        existingExtraConfig?: ProductExtraConfig | null
+    ): ProductExtraConfig => {
+        const pricingMode = values.pricing_mode ?? 'fixed';
+        const productMode = values.product_mode ?? 'normal';
+        const spinRewards = (values.spin_rewards ?? []).map((reward, index) => ({
+            id:
+                String(reward.id || '').trim() ||
+                `${reward.category || 'none'}:${reward.idItem || 'empty'}:${index + 1}`,
+            label: String(reward.label || '').trim(),
+            category: String(reward.category || '').trim(),
+            idItem: String(reward.idItem || '').trim(),
+            data: Number(reward.data ?? 1),
+            probability: Number(reward.probability ?? 1),
+        }));
+        return {
+            ...(existingExtraConfig ?? {}),
+            homepage_featured: Boolean(values.homepage_featured),
+            product_mode: productMode,
+            lottery:
+                productMode === 'lottery'
+                    ? {
+                          ...(existingExtraConfig?.lottery ?? {}),
+                          draw_at: values.draw_at?.toISOString() ?? new Date().toISOString(),
+                          winner_count: Number(values.winner_count ?? 1),
+                      }
+                    : null,
+            spin_lottery:
+                productMode === 'spin_lottery'
+                    ? {
+                          chance_per_share: Number(values.spin_chance_per_share ?? 1),
+                          daily_share_limit: Number(values.spin_daily_share_limit ?? 1),
+                          rewards: spinRewards,
+                      }
+                    : null,
+            pricing:
+                productMode === 'spin_lottery' || pricingMode === 'fixed'
+                    ? null
+                    : pricingMode === 'market'
+                      ? {
+                            enabled: true,
+                            mode: 'market',
+                            sales_threshold: Number(values.sales_threshold ?? 10),
+                            sales_step_percent: Number(values.sales_step_percent ?? 5),
+                            weekend_markup_percent: Number(values.weekend_markup_percent ?? 10),
+                            weekday_night_markup_percent: Number(
+                                values.weekday_night_markup_percent ?? 6
+                            ),
+                            min_adjustment_percent: Number(values.min_adjustment_percent ?? 0),
+                            max_adjustment_percent: Number(values.max_adjustment_percent ?? 50),
+                        }
+                      : {
+                            enabled: true,
+                            mode: 'discriminatory',
+                            high_price: Number(values.high_price ?? values.price ?? 0),
+                            low_price: Number(values.low_price ?? values.price ?? 0),
+                        },
+        };
+    };
+
     const loadProducts = async (keyword: string = '') => {
         setLoading(true);
         try {
@@ -208,22 +311,73 @@ export default function ProductManagementPage() {
         loadProducts(searchValue);
     };
 
+    const exceedsHomepageFeaturedLimit = (
+        values: AddFormValues | UpdateFormValues,
+        currentProductId?: string | number
+    ) => {
+        if (!values.homepage_featured) {
+            return false;
+        }
+
+        const featuredCount = products.filter(product => {
+            const sameProduct =
+                currentProductId !== undefined &&
+                String((product as any).id ?? (product as any).ID) === String(currentProductId);
+            if (sameProduct) {
+                return false;
+            }
+            return Boolean(product.extra_config?.homepage_featured);
+        }).length;
+
+        return featuredCount >= 2;
+    };
+
+    const buildProductJson = (values: AddFormValues | UpdateFormValues, fallbackJson?: string) => {
+        if (values.product_mode === 'spin_lottery') {
+            const firstReward = values.spin_rewards?.[0];
+            return JSON.stringify([
+                {
+                    category: String(firstReward?.category || 'spin'),
+                    idItem: String(firstReward?.idItem || 'default'),
+                    data: Number(firstReward?.data ?? 1),
+                },
+            ]);
+        }
+
+        if ('category' in values && 'idItem' in values) {
+            return JSON.stringify([
+                {
+                    category: values.category,
+                    idItem: values.idItem,
+                    data: values.data,
+                },
+            ]);
+        }
+
+        if (fallbackJson) {
+            return fallbackJson;
+        }
+
+        return JSON.stringify([]);
+    };
+
     const handleAddSubmit = async (values: AddFormValues) => {
+        if (exceedsHomepageFeaturedLimit(values)) {
+            messageApi.warning(gLang('shopAdmin.update.homepageFeaturedLimit'));
+            return;
+        }
+
         setConfirmLoading(true);
         try {
             const payload = {
                 ...values,
-                json: JSON.stringify([
-                    {
-                        category: values.category,
-                        idItem: values.idItem,
-                        data: values.data,
-                    },
-                ]),
+                price: values.price,
+                json: buildProductJson(values),
                 total_limit: values.total_limit ?? null,
                 monthly_limit: values.monthly_limit ?? null,
                 global_limit: values.global_limit ?? null,
                 permanent_limit: values.permanent_limit ?? null,
+                extra_config: buildExtraConfig(values),
             };
 
             await fetchData({
@@ -245,6 +399,10 @@ export default function ProductManagementPage() {
 
     const handleUpdateSubmit = async (values: UpdateFormValues) => {
         if (!editingProduct) return;
+        if (exceedsHomepageFeaturedLimit(values, editingProduct.id)) {
+            messageApi.warning(gLang('shopAdmin.update.homepageFeaturedLimit'));
+            return;
+        }
 
         setConfirmLoading(true);
         try {
@@ -252,11 +410,16 @@ export default function ProductManagementPage() {
             const { data, ...restValues } = values;
             const payload = {
                 ...restValues,
+                price: values.price,
                 total_limit: values.total_limit ?? null,
                 monthly_limit: values.monthly_limit ?? null,
                 global_limit: values.global_limit ?? null,
                 permanent_limit: values.permanent_limit ?? null,
-                json: JSON.stringify([{ ...originalJson, data: data }]),
+                json:
+                    values.product_mode === 'spin_lottery'
+                        ? buildProductJson(values, editingProduct.json)
+                        : JSON.stringify([{ ...originalJson, data: data }]),
+                extra_config: buildExtraConfig(values, editingProduct.extra_config),
             };
 
             await fetchData({
@@ -316,6 +479,29 @@ export default function ProductManagementPage() {
             name,
             color: CATEGORY_COLORS[index % CATEGORY_COLORS.length] ?? 'blue',
         }));
+    }, [products]);
+    const spinRewardProductOptions = useMemo<SpinRewardProductOption[]>(() => {
+        return products
+            .filter(product => (product.extra_config?.product_mode ?? 'normal') !== 'spin_lottery')
+            .map(product => {
+                const parsed = parseProductJson(product.json);
+                const productId = String((product as any).id ?? (product as any).ID ?? '');
+                return {
+                    value: productId,
+                    title: String(product.title ?? '').trim(),
+                    category: String(parsed.category ?? '').trim(),
+                    idItem: String(parsed.idItem ?? '').trim(),
+                    data: Number(parsed.data ?? 1),
+                };
+            })
+            .filter(
+                option =>
+                    !!option.value &&
+                    !!option.title &&
+                    !!option.category &&
+                    !!option.idItem &&
+                    Number.isFinite(option.data)
+            );
     }, [products]);
 
     const tabItems = useMemo(
@@ -441,6 +627,62 @@ export default function ProductManagementPage() {
                                                 global_limit: normalized.global_limit,
                                                 permanent_limit: normalized.permanent_limit,
                                                 is_hidden: normalized.is_hidden ?? 0,
+                                                homepage_featured:
+                                                    normalized.extra_config?.homepage_featured ??
+                                                    false,
+                                                product_mode:
+                                                    normalized.extra_config?.product_mode ?? 'normal',
+                                                draw_at: normalized.extra_config?.lottery?.draw_at
+                                                    ? dayjs(normalized.extra_config.lottery.draw_at)
+                                                    : undefined,
+                                                winner_count:
+                                                    normalized.extra_config?.lottery?.winner_count ?? undefined,
+                                                pricing_mode:
+                                                    normalized.extra_config?.pricing?.mode ?? 'fixed',
+                                                sales_threshold:
+                                                    normalized.extra_config?.pricing?.mode === 'market'
+                                                        ? normalized.extra_config.pricing.sales_threshold
+                                                        : undefined,
+                                                sales_step_percent:
+                                                    normalized.extra_config?.pricing?.mode === 'market'
+                                                        ? normalized.extra_config.pricing.sales_step_percent
+                                                        : undefined,
+                                                weekend_markup_percent:
+                                                    normalized.extra_config?.pricing?.mode === 'market'
+                                                        ? normalized.extra_config.pricing.weekend_markup_percent
+                                                        : undefined,
+                                                weekday_night_markup_percent:
+                                                    normalized.extra_config?.pricing?.mode === 'market'
+                                                        ? normalized.extra_config.pricing.weekday_night_markup_percent
+                                                        : undefined,
+                                                min_adjustment_percent:
+                                                    normalized.extra_config?.pricing?.mode === 'market'
+                                                        ? normalized.extra_config.pricing.min_adjustment_percent
+                                                        : undefined,
+                                                max_adjustment_percent:
+                                                    normalized.extra_config?.pricing?.mode === 'market'
+                                                        ? normalized.extra_config.pricing.max_adjustment_percent
+                                                        : undefined,
+                                                high_price:
+                                                    normalized.extra_config?.pricing?.mode === 'discriminatory'
+                                                        ? normalized.extra_config.pricing.high_price
+                                                        : undefined,
+                                                low_price:
+                                                    normalized.extra_config?.pricing?.mode === 'discriminatory'
+                                                        ? normalized.extra_config.pricing.low_price
+                                                        : undefined,
+                                                spin_chance_per_share:
+                                                    normalized.extra_config?.product_mode === 'spin_lottery'
+                                                        ? normalized.extra_config.spin_lottery?.chance_per_share
+                                                        : undefined,
+                                                spin_daily_share_limit:
+                                                    normalized.extra_config?.product_mode === 'spin_lottery'
+                                                        ? normalized.extra_config.spin_lottery?.daily_share_limit
+                                                        : undefined,
+                                                spin_rewards:
+                                                    normalized.extra_config?.product_mode === 'spin_lottery'
+                                                        ? normalized.extra_config.spin_lottery?.rewards
+                                                        : undefined,
                                             });
                                         }}
                                         gLang={gLang}
@@ -478,6 +720,7 @@ export default function ProductManagementPage() {
                     onCancel={() => setIsAddModalVisible(false)}
                     onOk={handleAddSubmit}
                     confirmLoading={confirmLoading}
+                    spinRewardProductOptions={spinRewardProductOptions}
                 />
 
                 {/* 编辑商品 Modal */}
@@ -491,6 +734,7 @@ export default function ProductManagementPage() {
                     confirmLoading={confirmLoading}
                     product={editingProduct}
                     initialFormValues={editFormValues}
+                    spinRewardProductOptions={spinRewardProductOptions}
                     onDelete={() => {
                         if (!editingProduct) return;
                         const currentId = (editingProduct as any).id ?? (editingProduct as any).ID;
@@ -520,6 +764,28 @@ export default function ProductManagementPage() {
                             },
                         });
                     }}
+                    onDrawLottery={
+                        editingProduct?.extra_config?.product_mode === 'lottery'
+                            ? () => {
+                                  if (!editingProduct) return;
+                                  const currentId = Number(
+                                      (editingProduct as any).id ?? (editingProduct as any).ID
+                                  );
+                                  fetchData({
+                                      url: `/item/lottery/${currentId}/draw`,
+                                      method: 'POST',
+                                      data: {},
+                                      setData: () => {
+                                          messageApi.success(gLang('shopAdmin.drawLottery.success'));
+                                          loadProducts(searchValue);
+                                          setEditingProduct(null);
+                                      },
+                                  }).catch(() => {
+                                      messageApi.error(gLang('shopAdmin.drawLottery.failure'));
+                                  });
+                              }
+                            : undefined
+                    }
                 />
 
                 {/* 删除确认改为使用 modal.confirm */}

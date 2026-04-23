@@ -10,6 +10,7 @@ interface FeedbackMetaPanelProps {
     tid: number;
     currentStatus?: TicketStatus;
     onSaved?: () => void;
+    refreshSignal?: number;
     onProgressChanged?: (
         newTag: FeedbackTagSummary | null,
         oldTag: FeedbackTagSummary | null
@@ -31,6 +32,7 @@ const serializeTagState = (
 const FeedbackMetaPanel: React.FC<FeedbackMetaPanelProps> = ({
     tid,
     onSaved,
+    refreshSignal = 0,
     onProgressChanged,
     compact = false,
 }) => {
@@ -91,7 +93,7 @@ const FeedbackMetaPanel: React.FC<FeedbackMetaPanelProps> = ({
 
     useEffect(() => {
         loadMeta();
-    }, [loadMeta]);
+    }, [loadMeta, refreshSignal]);
 
     const handleSaveTags = useCallback(async () => {
         setTagSaving(true);

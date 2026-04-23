@@ -8,6 +8,7 @@ import Typography from 'antd/es/typography';
 import Segmented from 'antd/es/segmented';
 import Switch from 'antd/es/switch';
 import Popover from 'antd/es/popover';
+import Button from 'antd/es/button';
 import { BellOutlined, BellFilled, MoreOutlined } from '@ant-design/icons';
 import { gLang } from '@common/language';
 import { Feedback, FeedbackTagSummary, TicketDetail, Ticket } from '@ecuc/shared/types/ticket.types';
@@ -50,6 +51,13 @@ interface FeedbackContentProps {
     adminNotesOverride?: React.ReactNode;
     /** 使用 contentHtml（管理端 URL）代替 contentHtmlUser */
     useAdminHtml?: boolean;
+    /** 回复区门槛状态 */
+    replyGuard?: {
+        mode: 'active' | 'login' | 'settings' | 'punished' | 'loading' | 'closed';
+        message?: string;
+        actionLabel?: string;
+        onAction?: () => void;
+    };
 }
 
 const FeedbackContent: React.FC<FeedbackContentProps> = ({
@@ -74,8 +82,9 @@ const FeedbackContent: React.FC<FeedbackContentProps> = ({
     adminFilterSlot,
     adminNotesOverride,
     useAdminHtml,
+    replyGuard,
 }) => {
-    useTheme();
+    const { getThemeColor } = useTheme();
     const [boundAccountsOpen, setBoundAccountsOpen] = useState(false);
     const getFadeInStyle = (): React.CSSProperties | undefined => {
         if (animationDelay <= 0) {
@@ -104,6 +113,7 @@ const FeedbackContent: React.FC<FeedbackContentProps> = ({
     );
 
     const progressTag: FeedbackTagSummary | null = (ticket as any).progressTag ?? null;
+    const replyGuardMode = replyGuard?.mode ?? 'active';
 
     // 处理主帖和回复数据
     const { mainPost, replies, detailIdToFloor } = useMemo((): {
@@ -396,17 +406,83 @@ const FeedbackContent: React.FC<FeedbackContentProps> = ({
                 {/* 回复表单 - 使用路由分发组件，根据设备类型选择合适的回复框 */}
                 {/* 管理端不显示回复框，参考设为精华工具的实现 */}
                 {onReply && onCancelReply && !onSetFeatured && (
-                    <FeedbackReplyRoute
-                        ticket={ticket as unknown as Ticket}
-                        onReply={onReply}
-                        onCancelReply={onCancelReply}
-                        replyingToDetailId={replyingToDetailId}
-                        isFormDisabled={isFormDisabled}
-                        animationDelay={animationDelay}
-                        cardIndex={cardIndex}
-                        mainPost={mainPost}
-                        replies={replies}
-                    />
+                    replyGuardMode === 'active' ? (
+                        <FeedbackReplyRoute
+                            ticket={ticket as unknown as Ticket}
+                            onReply={onReply}
+                            onCancelReply={onCancelReply}
+                            replyingToDetailId={replyingToDetailId}
+                            isFormDisabled={isFormDisabled}
+                            animationDelay={animationDelay}
+                            cardIndex={cardIndex}
+                            mainPost={mainPost}
+                            replies={replies}
+                        />
+                    ) : replyGuardMode === 'closed' ? null : (
+                        <div style={getFadeInStyle()}>
+                            <Card
+                                style={{
+                                    borderRadius: 8,
+                                    position: 'relative',
+                                    overflow: 'hidden',
+                                }}
+                                bodyStyle={{ padding: 20 }}
+                            >
+                                <div
+                                    style={{
+                                        opacity: 0.35,
+                                        filter: 'blur(1px)',
+                                        pointerEvents: 'none',
+                                    }}
+                                >
+                                    <div
+                                            style={{
+                                                minHeight: 112,
+                                                borderRadius: 8,
+                                                border: `1px dashed ${getThemeColor({ light: '#d9d9d9', dark: '#434343' })}`,
+                                                padding: 16,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                            justifyContent: 'center',
+                                        }}
+                                    >
+                                        <Text type="secondary">
+                                            {gLang('feedback.replyComposerPlaceholder')}
+                                        </Text>
+                                    </div>
+                                </div>
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        background: getThemeColor({
+                                            light: 'linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.88) 48%, rgba(255,255,255,0.96) 100%)',
+                                            dark: 'linear-gradient(180deg, rgba(20,20,20,0.2) 0%, rgba(20,20,20,0.88) 48%, rgba(20,20,20,0.96) 100%)',
+                                        }),
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: 20,
+                                    }}
+                                >
+                                    <Space
+                                        direction="vertical"
+                                        size="middle"
+                                        style={{ width: '100%', textAlign: 'center' }}
+                                    >
+                                        <Text>{replyGuard?.message}</Text>
+                                        {replyGuard?.actionLabel && replyGuard?.onAction && (
+                                            <div>
+                                                <Button type="primary" onClick={replyGuard.onAction}>
+                                                    {replyGuard.actionLabel}
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </Space>
+                                </div>
+                            </Card>
+                        </div>
+                    )
                 )}
             </Space>
         </div>

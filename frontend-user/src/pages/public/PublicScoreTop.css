@@ -1,0 +1,83 @@
+/* 排行榜页面动画效果 */
+
+/* 卡片淡入动画 */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 排名数字动画 */
+@keyframes rankPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+/* 前三名特殊动画 */
+@keyframes topRankGlow {
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+    }
+}
+
+/* 卡片容器动画 */
+.score-top-card {
+    animation: fadeInUp 0.6s ease-out forwards;
+}
+
+/* 卡片交错动画延迟 */
+.score-top-card:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.score-top-card:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.score-top-card:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+.score-top-card:nth-child(4) {
+    animation-delay: 0.4s;
+}
+
+.score-top-card:nth-child(5) {
+    animation-delay: 0.5s;
+}
+
+/* 页面整体淡入效果 */
+.score-top-page {
+    animation: fadeInUp 0.8s ease-out forwards;
+}
+
+/* 按钮悬停效果 */
+.refresh-button {
+    transition: all 0.3s ease;
+}
+
+.refresh-button:hover {
+    transform: scale(1.05);
+}
+
+/* 标签动画效果 */
+.deadline-tag {
+    transition: all 0.3s ease;
+}
+
+.deadline-tag:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}

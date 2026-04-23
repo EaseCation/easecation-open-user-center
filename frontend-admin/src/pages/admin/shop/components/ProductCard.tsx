@@ -165,6 +165,31 @@ const ProductCard: React.FC<ProductCardProps> = ({
                             : gLang('shop.executiveLimit')}
                     </Tag>
                 )}
+                {product.extra_config?.product_mode === 'lottery' && (
+                    <Tag color="processing" style={{ margin: 0 }}>
+                        {gLang('shop.lotteryTag')}
+                    </Tag>
+                )}
+                {product.extra_config?.product_mode === 'spin_lottery' && (
+                    <Tag color="purple" style={{ margin: 0 }}>
+                        {gLang('shop.spinLotteryTag')}
+                    </Tag>
+                )}
+                {product.pricing_preview?.mode === 'market' && (
+                    <Tag color="volcano" style={{ margin: 0 }}>
+                        {gLang('shop.surprisePriceTag')}
+                    </Tag>
+                )}
+                {product.pricing_preview?.mode === 'discriminatory' && (
+                    <Tag color="gold" style={{ margin: 0 }}>
+                        {gLang('shop.exclusivePriceTag')}
+                    </Tag>
+                )}
+                {product.extra_config?.homepage_featured && (
+                    <Tag color="blue" style={{ margin: 0 }}>
+                        {gLang('shopAdmin.option.homepageFeaturedBadge')}
+                    </Tag>
+                )}
                 <Text
                     style={{
                         color: priceColor,

@@ -114,40 +114,13 @@ const PlayerPanelAction = ({
                                 [{gLang('openidPanel.quickActions')}] {shortcut.title}
                             </Option>
                         ))}
-                        <Option value="unban">{gLang('superPanel.actionTypeSelect.unban')}</Option>
-                        <Option value="unfrozen">
-                            {gLang('superPanel.actionTypeSelect.unfrozen')}
-                        </Option>
                         <Option value="ban">{gLang('superPanel.actionTypeSelect.ban')}</Option>
-                        <Option value="ban_long">
-                            {gLang('superPanel.actionTypeSelect.ban_long')}
-                        </Option>
-                        <Option value="hack">{gLang('superPanel.actionTypeSelect.hack')}</Option>
-                        <Option value="hack_long">
-                            {gLang('superPanel.actionTypeSelect.hack_long')}
-                        </Option>
-                        <Option value="mute">{gLang('superPanel.actionTypeSelect.mute')}</Option>
-                        <Option value="unmute">
-                            {gLang('superPanel.actionTypeSelect.unmute')}
-                        </Option>
                         <Option value="gift">{gLang('superPanel.actionTypeSelect.gift')}</Option>
                         <Option value="gift_vip">
                             {gLang('superPanel.actionTypeSelect.gift_vip')}
                         </Option>
-                        <Option value="warning">
-                            {gLang('superPanel.actionTypeSelect.warning')}
-                        </Option>
                         <Option value="overwatch">
                             {gLang('superPanel.actionTypeSelect.overwatch')}
-                        </Option>
-                        <Option value="frozen">
-                            {gLang('superPanel.actionTypeSelect.frozen')}
-                        </Option>
-                        <Option value="frozen_all">
-                            {gLang('superPanel.actionTypeSelect.frozen_all')}
-                        </Option>
-                        <Option value="unfreeze_all">
-                            {gLang('superPanel.actionTypeSelect.unfreeze_all')}
                         </Option>
                         <Option value="media">{gLang('superPanel.actionTypeSelect.media')}</Option>
                         <Option value="note">{gLang('superPanel.actionTypeSelect.note')}</Option>
@@ -156,12 +129,6 @@ const PlayerPanelAction = ({
                         </Option>
                         <Option value="freeze_score_top">
                             {gLang('superPanel.actionTypeSelect.freeze_score_top')}
-                        </Option>
-                        <Option value="freeze_score_top_long">
-                            {gLang('superPanel.actionTypeSelect.freeze_score_top_long')}
-                        </Option>
-                        <Option value="unfreeze_score_top">
-                            {gLang('superPanel.actionTypeSelect.unfreeze_score_top')}
                         </Option>
                         <Option value="restrict_nick">
                             {gLang('superPanel.actionTypeSelect.restrict_nick')}

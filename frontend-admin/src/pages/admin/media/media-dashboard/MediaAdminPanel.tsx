@@ -22,6 +22,7 @@ import { fetchData } from '@common/axiosConfig';
 import useIsPC from '@common/hooks/useIsPC';
 import { useTicketCountUpdate } from '@common/hooks/useTicketStatusUpdate';
 import AdminToolCard from '../../components/AdminToolCard';
+import MediaEventStatsModal from './components/MediaEventStatsModal';
 
 type UserInfoLite = { permission?: string[] };
 
@@ -35,6 +36,7 @@ const MediaAdminPanel = () => {
 
     const [ticketCount, setTicketCount] = useState<MediaTicketCountPublic>();
     const [userInfo, setUserInfo] = useState<UserInfoLite | null>(null);
+    const [showMediaEventStatsModal, setShowMediaEventStatsModal] = useState(false);
 
     // 使用实时更新hook
     const countUpdateTrigger = useTicketCountUpdate();
@@ -113,6 +115,8 @@ const MediaAdminPanel = () => {
                             isPC={isPC}
                             icon={<LikeOutlined />}
                             title={gLang('mediaAdmin.ticket.mediaEvent')}
+                            onClick={() => setShowMediaEventStatsModal(true)}
+                            buttonText={gLang('admin.mediaEventStatsModal.viewButton')}
                             loading={!ticketCount}
                         />
                     </Space>
@@ -154,6 +158,8 @@ const MediaAdminPanel = () => {
                                 isPC={false}
                                 icon={<LikeOutlined />}
                                 title={gLang('mediaAdmin.ticket.mediaEvent')}
+                                onClick={() => setShowMediaEventStatsModal(true)}
+                                buttonText={gLang('admin.mediaEventStatsModal.viewButton')}
                             />
                         </Col>
                     </Row>
@@ -286,6 +292,10 @@ const MediaAdminPanel = () => {
                     </Row>
                 )}
             </Space>
+            <MediaEventStatsModal
+                open={showMediaEventStatsModal}
+                onCancel={() => setShowMediaEventStatsModal(false)}
+            />
         </Space>
     );
 };

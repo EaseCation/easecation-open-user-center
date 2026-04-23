@@ -30,8 +30,8 @@ yarn start
 
 - `MOCK_BACKEND_PORT`：服务端口（默认 `9000`）
 - `PORT`：服务端口（与 `MOCK_BACKEND_PORT` 二选一）
-- `MOCK_FRONTEND_USER_URL`：用户前端地址（默认 `http://localhost:9001`）
-- `MOCK_FRONTEND_ADMIN_URL`：管理前端地址（默认 `http://localhost:9002`）
+- `MOCK_FRONTEND_USER_URL`：用户前端地址（默认 `http://localhost:9101`）
+- `MOCK_FRONTEND_ADMIN_URL`：管理前端地址（默认 `http://localhost:9102`）
 
 ## 已覆盖的接口分组
 

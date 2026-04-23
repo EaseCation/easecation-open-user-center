@@ -4,21 +4,29 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+    App,
     Button,
     Col,
     DatePicker,
+    Flex,
     Form,
     Input,
     Modal,
     Row,
     Select,
+    InputNumber,
     Spin,
     TimePicker,
     Typography,
     Upload,
     message,
 } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import {
+    CloudOutlined,
+    EditOutlined,
+    NotificationOutlined,
+    UploadOutlined,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 
@@ -27,7 +35,7 @@ import { Link } from 'react-router-dom';
 import { gLang } from '@common/language';
 import { fetchData, submitData } from '../../../../axiosConfig';
 import { useUploadProps } from '@common/utils/uploadUtils';
-import { TicketAccount, TicketType } from '@ecuc/shared/types/ticket.types';
+import { Ticket, TicketAccount, TicketType } from '@ecuc/shared/types/ticket.types';
 import { MediaListData, MediaStatus } from '@ecuc/shared/types/media.types';
 import {
     GAME_MODES,
@@ -37,7 +45,10 @@ import {
 } from '@ecuc/shared/constants/ticket.constants';
 import locale from 'antd/es/date-picker/locale/zh_CN';
 import ErrorDisplay from '../../../../components/ErrorDisplay';
-import quickInsertConfig, { QuickInsertItem } from '../../../../config/quickInsert.config';
+import quickInsertConfig, {
+    QuickInsertExtraField,
+    QuickInsertItem,
+} from '../../../../config/quickInsert.config';
 import {
     clearTicketDraft,
     loadTicketDraft,
@@ -64,17 +75,45 @@ const findOptionName = (
     return options.find(option => option.key === optionKey)?.name;
 };
 
+const normalizeTargetValue = (value?: string): string => (value ?? '').trim().toLowerCase();
+const isEmptyQuickInsertValue = (value: unknown): boolean => {
+    if (value === null || value === undefined) {
+        return true;
+    }
+    if (typeof value === 'string') {
+        return value.trim() === '';
+    }
+    return false;
+};
+
+const getQuickInsertFieldDisplayValue = (
+    field: QuickInsertExtraField,
+    value: unknown
+): string | number => {
+    if (field.inputType === 'select' && field.options) {
+        const matched = field.options.find(option => option.value === value);
+        if (matched) {
+            return gLang(matched.labelKey);
+        }
+    }
+    if (typeof value === 'string') {
+        return value.trim();
+    }
+    return value as string | number;
+};
+
 const buildRpDetails = (values: Record<string, any>): string => {
     const violationCategoryName =
-        findOptionName(RP_VIOLATION_CATEGORIES, values.violationCategory) ?? values.violationCategory;
+        findOptionName(RP_VIOLATION_CATEGORIES, values.violationCategory) ??
+        values.violationCategory;
     const evidenceTypeName =
         findOptionName(RP_EVIDENCE_TYPES, values.evidenceType) ?? values.evidenceType;
     const cheatSignalNames =
         values.violationCategory === 'cheat' && Array.isArray(values.cheatSignals)
-        ? values.cheatSignals
-              .map((signal: string) => findOptionName(RP_CHEAT_SIGNALS, signal) ?? signal)
-              .join('、')
-        : '';
+            ? values.cheatSignals
+                  .map((signal: string) => findOptionName(RP_CHEAT_SIGNALS, signal) ?? signal)
+                  .join(', ')
+            : '';
 
     const lines = [
         `${gLang('ticketList.rpFields.violationCategory')}: ${violationCategoryName ?? ''}`,
@@ -133,47 +172,154 @@ const mapUploadedFilesToFileList = (files: string[]): UploadFile[] => {
     }));
 };
 
+/** 深度链接 ?event=wechat|rednote|other �?ME 工单活动（quickInsert）键 */
+const MEDIA_EVENT_QUERY_TO_ACTIVITY: Record<'wechat' | 'rednote' | 'other', string> = {
+    wechat: 'ECNET_LIKE',
+    rednote: 'ECXHS_POST',
+    other: 'OTHER',
+};
+
+const MEDIA_EVENT_CARD_META: Record<
+    string,
+    { icon: React.ReactNode; color: string; shadow: string; summaryKey: string }
+> = {
+    ECNET_LIKE: {
+        icon: <NotificationOutlined />,
+        color: '#13C2C2',
+        shadow: 'rgba(19, 194, 194, 0.28)',
+        summaryKey: 'ticketList.mediaEventSummary.ECNET_LIKE',
+    },
+    ECXHS_POST: {
+        icon: <EditOutlined />,
+        color: '#F759AB',
+        shadow: 'rgba(247, 89, 171, 0.28)',
+        summaryKey: 'ticketList.mediaEventSummary.ECXHS_POST',
+    },
+    CLOUD_MATERIAL: {
+        icon: <CloudOutlined />,
+        color: '#2F54EB',
+        shadow: 'rgba(47, 84, 235, 0.3)',
+        summaryKey: 'ticketList.mediaEventSummary.CLOUD_MATERIAL',
+    },
+    OTHER: {
+        icon: <UploadOutlined />,
+        color: '#52C41A',
+        shadow: 'rgba(82, 196, 26, 0.3)',
+        summaryKey: 'ticketList.mediaEventSummary.OTHER',
+    },
+};
+
+export type TicketFormInitialMediaEvent = keyof typeof MEDIA_EVENT_QUERY_TO_ACTIVITY;
+export type TicketFormInitialMediaActivityKey = 'ECNET_LIKE' | 'ECXHS_POST' | 'CLOUD_MATERIAL' | 'OTHER';
+
 interface TicketFormProps {
     setIsModalOpen: (open: boolean) => void;
     initialType?: TicketType;
     hideTypeSelector?: boolean;
+    /** /ticket/new?type=ME&event=wechat|rednote|other 时预填媒体活�?*/
+    initialMediaEvent?: TicketFormInitialMediaEvent;
+    /** 预设媒体活动模板键（用于二级弹窗选择后直达表单） */
+    initialMediaActivityKey?: TicketFormInitialMediaActivityKey;
 }
 
 const TicketForm: React.FC<TicketFormProps> = ({
     setIsModalOpen,
     initialType,
     hideTypeSelector,
+    initialMediaEvent,
+    initialMediaActivityKey,
 }) => {
+    const resolvedInitialMediaActivityKey =
+        initialMediaActivityKey ??
+        (initialMediaEvent ? MEDIA_EVENT_QUERY_TO_ACTIVITY[initialMediaEvent] : undefined);
     const [form] = Form.useForm();
-    // useModal 初始化
+    // useModal 初始�?
     const [modal, modalContextHolder] = Modal.useModal();
+    const { modal: appModal } = App.useApp();
     const { user } = useAuth();
 
     const [isSubmitBtnDisabled, setIsSubmitBtnDisabled] = useState(false);
     const [isSpinning, setIsSpinning] = useState(true);
     const [ticketType, setTicketType] = useState<TicketType>(initialType || TicketType.None);
-    const [selectedQuickInsert, setSelectedQuickInsert] = useState<string | null>(null);
+    const [selectedQuickInsert, setSelectedQuickInsert] = useState<string | null>(
+        initialType === TicketType.MediaEvents && resolvedInitialMediaActivityKey
+            ? resolvedInitialMediaActivityKey
+            : null
+    );
     const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
     const [isFormDisabled, setIsFormDisabled] = useState(false);
+    const [isSubmitFlowLocked, setIsSubmitFlowLocked] = useState(false);
+    const [isConfirmActionLocked, setIsConfirmActionLocked] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState<boolean>(false);
     const [messageApi, messageContextHolder] = message.useMessage();
     const rpViolationCategory = Form.useWatch('violationCategory', form);
     const rpEvidenceType = Form.useWatch('evidenceType', form);
+    const cloudMaterialPurchaseMethod = Form.useWatch('cloudMaterialPurchaseMethod', form);
 
-    // ME工单媒体账号状态检查
+    // ME工单媒体账号状态检�?
     const [mediaData, setMediaData] = useState<MediaListData | null>(null);
     const [mediaStatusError, setMediaStatusError] = useState<string>('');
-
     const { uploadProps, contextHolder } = useUploadProps(
         10,
         uploadedFiles,
         setUploadedFiles,
         setIsUploading
     );
+    const submittingModalRef = useRef<{ destroy: () => void } | null>(null);
     const clearedAccountRef = useRef<string | null>(null);
     /** While true, skip persisting draft until user answers restore prompt (avoids overwriting storage with empty form). */
     const draftResolutionPendingRef = useRef(false);
+    /** 记录已通过 URL 预填�?ME 活动，避免依赖项变化导致重复 apply（如重复拼接详情模板�?*/
+    const lastMediaUrlPresetRef = useRef<string | null>(null);
+    const tryApplyInitialMediaEventRef = useRef<() => void>(() => undefined);
+    const tryApplyInitialMediaActivityKeyRef = useRef<() => void>(() => undefined);
+    const closeSubmittingModal = () => {
+        submittingModalRef.current?.destroy();
+        submittingModalRef.current = null;
+    };
+    const openSubmittingModal = () => {
+        if (submittingModalRef.current) {
+            return;
+        }
+        submittingModalRef.current = appModal.info({
+            icon: null,
+            title: null,
+            content: (
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        gap: '12px',
+                        padding: '8px 0',
+                    }}
+                >
+                    <img
+                        src="/logo/EaseCation.png"
+                        alt=""
+                        className="easecation-logo-breathe"
+                        style={{ width: 160, height: 160, objectFit: 'contain' }}
+                    />
+                    <Flex align="center" justify="center" gap={8}>
+                        <Spin size="small" />
+                        <Paragraph style={{ marginBottom: 0, fontSize: '18px', fontWeight: 600 }}>
+                            {gLang('ticketList.submittingTitle')}
+                        </Paragraph>
+                    </Flex>
+                </div>
+            ),
+            okButtonProps: {
+                style: { display: 'none' },
+            },
+            closable: false,
+            maskClosable: false,
+            keyboard: false,
+            centered: true,
+        });
+    };
 
     // 获取媒体账号信息
     const fetchMediaData = useCallback(async () => {
@@ -191,10 +337,15 @@ const TicketForm: React.FC<TicketFormProps> = ({
         }
     }, []);
 
-    // 检查ME工单的媒体账号状态
+    // ME����ý���˺�״̬���
     const checkMediaStatusForME = useCallback(
         (mediaData: MediaListData | null) => {
             if (ticketType !== TicketType.MediaEvents) {
+                setMediaStatusError('');
+                return true;
+            }
+            
+            if (selectedQuickInsert === 'CLOUD_MATERIAL') {
                 setMediaStatusError('');
                 return true;
             }
@@ -217,7 +368,7 @@ const TicketForm: React.FC<TicketFormProps> = ({
             setMediaStatusError('');
             return true;
         },
-        [ticketType]
+        [ticketType, selectedQuickInsert]
     );
 
     const applyQuickInsertAvailability = useCallback(
@@ -225,7 +376,7 @@ const TicketForm: React.FC<TicketFormProps> = ({
             let shouldDisableBtn = false;
             let submitText = gLang('ticketList.submit');
 
-            // 检查ME工单的媒体账号状态
+            // 检查ME工单的媒体账号状�?
             if (ticketType === TicketType.MediaEvents) {
                 const isMediaStatusValid = checkMediaStatusForME(mediaData);
                 if (!isMediaStatusValid) {
@@ -258,6 +409,7 @@ const TicketForm: React.FC<TicketFormProps> = ({
     );
 
     const handleSubmit = async (values: any) => {
+        setIsSubmitFlowLocked(true);
         setError(false);
         try {
             const configItem = quickInsertConfig[ticketType]?.[values.activity];
@@ -267,8 +419,12 @@ const TicketForm: React.FC<TicketFormProps> = ({
                 const extraDetails = configItem.extraFields
                     .map(field => {
                         const label = gLang(field.labelKey).toString();
-                        const value = values[field.name];
-                        return value ? `${label}:${value}` : '';
+                        const rawValue = values[field.name];
+                        if (isEmptyQuickInsertValue(rawValue)) {
+                            return '';
+                        }
+                        const value = getQuickInsertFieldDisplayValue(field, rawValue);
+                        return `${label}: ${value}`;
                     })
                     .filter(Boolean)
                     .join('\n');
@@ -278,96 +434,221 @@ const TicketForm: React.FC<TicketFormProps> = ({
             if (ticketType === TicketType.ReportPlayer) {
                 details = buildRpDetails(values);
             }
+
+            const targetValue = [TicketType.ReportPlayer, TicketType.Others].includes(ticketType)
+                ? values.targetChoose
+                : values.target;
+            let submitTitle = values.title;
+            if (ticketType === TicketType.MediaEvents && values.activity === 'CLOUD_MATERIAL') {
+                const cloudMaterialTitle = String(values.cloudMaterialTitle ?? '').trim();
+                submitTitle = gLang('ticketList.cloudMaterialTicketTitle', {
+                    title: cloudMaterialTitle,
+                }).trim();
+            }
+
+            if (ticketType === TicketType.ReportPlayer) {
+                const normalizedTarget = normalizeTargetValue(targetValue);
+                if (normalizedTarget) {
+                    let ticketList: Ticket[] = [];
+                    try {
+                        await fetchData({
+                            url: '/ticket/list',
+                            method: 'GET',
+                            data: {},
+                            setData: (data: Ticket[]) => {
+                                ticketList = Array.isArray(data) ? data : [];
+                            },
+                        });
+                    } catch {
+                        ticketList = [];
+                    }
+
+                    const rpTicketIds = ticketList
+                        .filter(item => item.type === TicketType.ReportPlayer && Number(item.tid) > 0)
+                        .map(item => Number(item.tid));
+
+                    const rpTicketDetails = await Promise.all(
+                        rpTicketIds.map(async tid => {
+                            let detail: Ticket | undefined;
+                            try {
+                                await fetchData({
+                                    url: '/ticket/detail',
+                                    method: 'GET',
+                                    data: { tid },
+                                    setData: (data: Ticket) => {
+                                        detail = data;
+                                    },
+                                });
+                            } catch {
+                                detail = undefined;
+                            }
+                            return detail;
+                        })
+                    );
+
+                    const sevenDaysAgo = dayjs().subtract(7, 'day');
+                    const duplicateCount = rpTicketDetails.filter(item => {
+                        if (!item) {
+                            return false;
+                        }
+                        if (normalizeTargetValue(item.target) !== normalizedTarget) {
+                            return false;
+                        }
+                        const createdAt = dayjs(item.create_time);
+                        if (!createdAt.isValid()) {
+                            return false;
+                        }
+                        return createdAt.isAfter(sevenDaysAgo) || createdAt.isSame(sevenDaysAgo);
+                    }).length;
+
+                    if (duplicateCount >= 1) {
+                        const shouldContinue = await new Promise<boolean>(resolve => {
+                            modal.confirm({
+                                title: gLang('ticketList.rpDuplicateReport.title'),
+                                content: (
+                                    <Typography>
+                                        <Paragraph>
+                                            {gLang('ticketList.rpDuplicateReport.content1')}
+                                        </Paragraph>
+                                        <Paragraph style={{ color: '#EC5B56' }}>
+                                            {gLang('ticketList.rpDuplicateReport.content2')}
+                                        </Paragraph>
+                                    </Typography>
+                                ),
+                                okText: gLang('ticketList.rpDuplicateReport.okText'),
+                                cancelText: gLang('ticketList.rpDuplicateReport.cancelText'),
+                                onOk: () => {
+                                    resolve(true);
+                                },
+                                onCancel: () => {
+                                    resolve(false);
+                                },
+                            });
+                        });
+
+                        if (!shouldContinue) {
+                            setIsSubmitFlowLocked(false);
+                            setIsConfirmActionLocked(false);
+                            closeSubmittingModal();
+                            return;
+                        }
+                    }
+                }
+            }
+
+            const typeToClear = (values.type || ticketType) as TicketType;
+            openSubmittingModal();
+            setIsModalOpen(false);
             await submitData({
                 data: {
                     type: values.type,
                     account: values.account,
-                    target: [TicketType.ReportPlayer, TicketType.Others].includes(ticketType)
-                        ? values.targetChoose
-                        : values.target,
+                    target: targetValue,
                     details: details,
                     files: uploadedFiles,
                     happened_at_date: values.happened_at_date,
                     happened_at_time: values.happened_at_time,
                     gameMode: values.gameMode,
-                    title: values.title,
+                    title: submitTitle,
                 },
                 url: '/ticket/new',
-                redirectTo: '/ticket',
+                redirectTo: '/ticket?submitted=1',
                 successMessage: 'ticketList.success',
                 method: 'POST',
                 setIsFormDisabled: setIsFormDisabled,
                 setIsModalOpen: setIsModalOpen,
             });
-            const typeToClear = (values.type || ticketType) as TicketType;
             if (typeToClear) {
                 clearTicketDraft(typeToClear);
             }
         } catch {
             setError(true);
             setIsFormDisabled(false);
+            setIsSubmitFlowLocked(false);
+            setIsConfirmActionLocked(false);
+            closeSubmittingModal();
         }
     };
 
-    const handleQuickInsertChange = async (value: string) => {
-        setSelectedQuickInsert(value);
-        const configItem = quickInsertConfig[ticketType]?.[value];
-        applyQuickInsertAvailability(configItem);
-        if (!configItem) return;
-        if (configItem.extraFields?.length) {
-            form.resetFields(configItem.extraFields.map(f => f.name));
+    const applyQuickInsertByKey = useCallback(
+        async (value: string) => {
+            setSelectedQuickInsert(value);
+            const configItem = quickInsertConfig[ticketType]?.[value];
+            applyQuickInsertAvailability(configItem);
+            if (!configItem) return;
+            if (configItem.extraFields?.length) {
+                form.resetFields(configItem.extraFields.map(f => f.name));
 
-            // 处理autoType字段
-            for (const field of configItem.extraFields) {
-                if (field.autoType === 'mediaID') {
-                    try {
-                        // 获取当前用户的openid
-                        const userOpenid = user?.openid;
-                        if (userOpenid) {
-                            // 调用API获取媒体信息
-                            let mediaId = null;
-                            await fetchData({
-                                url: '/media/list',
-                                method: 'GET',
-                                data: {},
-                                setData: response => {
-                                    if (response && response.is_media_member && response.media) {
-                                        mediaId = response.media.id;
-                                    }
-                                },
-                            });
+                // 处理autoType字段
+                for (const field of configItem.extraFields) {
+                    if (field.autoType === 'mediaID') {
+                        try {
+                            // 获取当前用户的openid
+                            const userOpenid = user?.openid;
+                            if (userOpenid) {
+                                // 调用API获取媒体信息
+                                let mediaId = null;
+                                await fetchData({
+                                    url: '/media/list',
+                                    method: 'GET',
+                                    data: {},
+                                    setData: response => {
+                                        if (response && response.is_media_member && response.media) {
+                                            mediaId = response.media.id;
+                                        }
+                                    },
+                                });
 
-                            if (mediaId) {
-                                // 如果有媒体信息，填写媒体ID
-                                form.setFieldValue(field.name, mediaId);
+                                if (mediaId) {
+                                    // 如果有媒体信息，填写媒体ID
+                                    form.setFieldValue(field.name, mediaId);
+                                } else {
+                                    // 如果没有媒体信息，填�?�?
+                                    form.setFieldValue(field.name, gLang('ticket.none'));
+                                }
                             } else {
-                                // 如果没有媒体信息，填写"无"
+                                // 如果没有openid，填�?�?
                                 form.setFieldValue(field.name, gLang('ticket.none'));
                             }
-                        } else {
-                            // 如果没有openid，填写"无"
+                        } catch {
+                            // 出错时填�?�?
                             form.setFieldValue(field.name, gLang('ticket.none'));
                         }
-                    } catch {
-                        // 出错时填写"无"
-                        form.setFieldValue(field.name, gLang('ticket.none'));
                     }
                 }
+            } else {
+                const details = form.getFieldValue('details') ?? '';
+                const template = gLang(configItem.contentKey).toString();
+                form.setFieldsValue({
+                    details: details !== '' ? `${template}\n${details}` : template,
+                });
             }
-        } else {
-            const details = form.getFieldValue('details') ?? '';
-            const template = gLang(configItem.contentKey).toString();
-            form.setFieldsValue({
-                details: details !== '' ? `${template}\n${details}` : template,
-            });
-        }
+        },
+        [ticketType, applyQuickInsertAvailability, form, user]
+    );
+
+    const handleQuickInsertChange = (value: string) => {
+        form.setFieldValue('activity', value);
+        void applyQuickInsertByKey(value);
     };
+
+    useEffect(() => {
+        if (
+            selectedQuickInsert !== 'CLOUD_MATERIAL' ||
+            cloudMaterialPurchaseMethod === 'ec_coin' ||
+            cloudMaterialPurchaseMethod === 'voucher'
+        ) {
+            return;
+        }
+        form.setFieldValue('cloudMaterialPrice', undefined);
+    }, [selectedQuickInsert, cloudMaterialPurchaseMethod, form]);
+
     const [chooseGameList, setChooseGameList] = useState<TicketAccount[]>([]);
     const [chooseGameFrozenList, setChooseGameFrozenList] = useState<TicketAccount[]>([]);
     const [submitBtnText, setSubmitBtnText] = useState<string>(gLang('ticketList.submit'));
     const [accountOptionsLoaded, setAccountOptionsLoaded] = useState(false);
 
-    // 自招申请状态：'before' - 未开始, 'open' - 进行中, 'closed' - 已结束
+    // 自招申请状态：'before' - 未开�? 'open' - 进行�? 'closed' - 已结�?
     const [adminApplicationStatus, setAdminApplicationStatus] = useState<
         'before' | 'open' | 'closed'
     >('before');
@@ -375,6 +656,71 @@ const TicketForm: React.FC<TicketFormProps> = ({
 
     const [openTime, setOpenTime] = useState(dayjs());
     const [closeTime, setCloseTime] = useState(dayjs());
+
+    const tryApplyInitialMediaEvent = useCallback(() => {
+        if (!initialMediaEvent || ticketType !== TicketType.MediaEvents) {
+            return;
+        }
+        if (draftResolutionPendingRef.current || isSpinning || error || !accountOptionsLoaded) {
+            return;
+        }
+        const activityKey = MEDIA_EVENT_QUERY_TO_ACTIVITY[initialMediaEvent];
+        if (!activityKey || !quickInsertConfig[TicketType.MediaEvents]?.[activityKey]) {
+            return;
+        }
+        const presetKey = `${initialMediaEvent}:${activityKey}`;
+        if (lastMediaUrlPresetRef.current === presetKey) {
+            return;
+        }
+        lastMediaUrlPresetRef.current = presetKey;
+        form.setFieldsValue({ activity: activityKey });
+        void applyQuickInsertByKey(activityKey);
+    }, [
+        initialMediaEvent,
+        ticketType,
+        isSpinning,
+        error,
+        accountOptionsLoaded,
+        form,
+        applyQuickInsertByKey,
+    ]);
+
+    const tryApplyInitialMediaActivityKey = useCallback(() => {
+        if (!resolvedInitialMediaActivityKey || ticketType !== TicketType.MediaEvents) {
+            return;
+        }
+        if (draftResolutionPendingRef.current || isSpinning || error || !accountOptionsLoaded) {
+            return;
+        }
+        if (!quickInsertConfig[TicketType.MediaEvents]?.[resolvedInitialMediaActivityKey]) {
+            return;
+        }
+        const presetKey = `activity_key:${resolvedInitialMediaActivityKey}`;
+        if (lastMediaUrlPresetRef.current === presetKey) {
+            return;
+        }
+        lastMediaUrlPresetRef.current = presetKey;
+        form.setFieldsValue({ activity: resolvedInitialMediaActivityKey });
+        void applyQuickInsertByKey(resolvedInitialMediaActivityKey);
+    }, [
+        resolvedInitialMediaActivityKey,
+        ticketType,
+        isSpinning,
+        error,
+        accountOptionsLoaded,
+        form,
+        applyQuickInsertByKey,
+    ]);
+
+    tryApplyInitialMediaEventRef.current = tryApplyInitialMediaEvent;
+    tryApplyInitialMediaActivityKeyRef.current = tryApplyInitialMediaActivityKey;
+
+    useEffect(() => {
+        tryApplyInitialMediaEvent();
+    }, [tryApplyInitialMediaEvent]);
+    useEffect(() => {
+        tryApplyInitialMediaActivityKey();
+    }, [tryApplyInitialMediaActivityKey]);
 
     useEffect(() => {
         if (!ticketType) {
@@ -384,8 +730,17 @@ const TicketForm: React.FC<TicketFormProps> = ({
         if (!draft) {
             draftResolutionPendingRef.current = false;
             setUploadedFiles([]);
-            setSelectedQuickInsert(null);
-            form.setFieldsValue({ type: ticketType, files: [] });
+            const presetMediaActivity =
+                ticketType === TicketType.MediaEvents ? resolvedInitialMediaActivityKey : undefined;
+            setSelectedQuickInsert(presetMediaActivity ?? null);
+            form.setFieldsValue({
+                type: ticketType,
+                files: [],
+                activity: presetMediaActivity,
+            });
+            if (presetMediaActivity) {
+                void applyQuickInsertByKey(presetMediaActivity);
+            }
             applyQuickInsertAvailability();
             return;
         }
@@ -434,6 +789,10 @@ const TicketForm: React.FC<TicketFormProps> = ({
             onCancel: () => {
                 draftResolutionPendingRef.current = false;
                 clearTicketDraft(ticketType);
+                queueMicrotask(() => {
+                    tryApplyInitialMediaEventRef.current();
+                    tryApplyInitialMediaActivityKeyRef.current();
+                });
             },
         });
 
@@ -513,7 +872,7 @@ const TicketForm: React.FC<TicketFormProps> = ({
             }),
         ];
 
-        // 如果是ME工单，需要获取媒体账号信息
+        // 如果是ME工单，需要获取媒体账号信�?
         if (ticketType === TicketType.MediaEvents) {
             fetchPromises.push(
                 fetchMediaData().then(success => {
@@ -589,7 +948,7 @@ const TicketForm: React.FC<TicketFormProps> = ({
         uploadedFiles,
     ]);
 
-    // 倒计时
+    // 倒计�?
     useEffect(() => {
         const timer = setInterval(() => {
             const now = dayjs();
@@ -646,7 +1005,15 @@ const TicketForm: React.FC<TicketFormProps> = ({
                     </Paragraph>
                 </Typography>
             ),
+            okButtonProps: {
+                disabled: isConfirmActionLocked || isSubmitFlowLocked,
+            },
+            cancelButtonProps: {
+                disabled: isConfirmActionLocked || isSubmitFlowLocked,
+            },
             onOk: () => {
+                setIsConfirmActionLocked(true);
+                setIsSubmitFlowLocked(true);
                 form.submit();
             },
         });
@@ -676,10 +1043,30 @@ const TicketForm: React.FC<TicketFormProps> = ({
                     clearTicketDraft(ticketType);
                 }
 
+                if (
+                    ticketType === TicketType.MediaEvents &&
+                    (initialMediaEvent || initialMediaActivityKey)
+                ) {
+                    lastMediaUrlPresetRef.current = null;
+                }
+
                 messageApi.success(gLang('ticketList.clearSuccess'));
             },
         });
     };
+
+    const shouldHideMeActivitySelector =
+        ticketType === TicketType.MediaEvents &&
+        hideTypeSelector &&
+        Boolean(resolvedInitialMediaActivityKey);
+    const shouldShowMeActivityFormFields =
+        ticketType !== TicketType.MediaEvents ||
+        Boolean(selectedQuickInsert) ||
+        Boolean(shouldHideMeActivitySelector && resolvedInitialMediaActivityKey);
+    const attachmentExtraText =
+        ticketType === TicketType.MediaEvents && selectedQuickInsert === 'CLOUD_MATERIAL'
+            ? gLang('ticketList.cloudMaterialAttachmentNote')
+            : gLang('ticketList.attachmentsExtra');
 
     return (
         <>
@@ -713,7 +1100,7 @@ const TicketForm: React.FC<TicketFormProps> = ({
             {!error && (
                 <Typography>
                     <Paragraph>{gLang('ticketList.newIntro')}</Paragraph>
-                    {/* 管理员申请工单 */}
+                    {/* 管理员申请工�?*/}
                     {ticketType && [TicketType.Application].includes(ticketType) && (
                         <>
                             {adminApplicationStatus === 'before' && (
@@ -881,6 +1268,11 @@ const TicketForm: React.FC<TicketFormProps> = ({
                             type: initialType,
                         }}
                         onFinish={handleSubmit}
+                        onFinishFailed={() => {
+                            setIsSubmitFlowLocked(false);
+                            setIsConfirmActionLocked(false);
+                            closeSubmittingModal();
+                        }}
                         autoComplete="off"
                         disabled={isFormDisabled}
                     >
@@ -900,7 +1292,7 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                     onChange={value => {
                                         setTicketType(value);
                                         setSelectedQuickInsert(null);
-                                        // 如果是ME工单，需要重新获取媒体账号信息
+                                        // 如果是ME工单，需要重新获取媒体账号信�?
                                         if (value === TicketType.MediaEvents) {
                                             fetchMediaData().then(() => {
                                                 applyQuickInsertAvailability();
@@ -982,7 +1374,6 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                         rules={[
                                             {
                                                 required: ![
-                                                    TicketType.Suggestion,
                                                     TicketType.Others,
                                                     TicketType.ReportStaff,
                                                 ].includes(ticketType),
@@ -1276,35 +1667,185 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                 )}
                                 {quickInsertConfig[ticketType] && (
                                     <>
-                                        <Form.Item
-                                            name="activity"
-                                            label={gLang('ticketList.activity')}
-                                            extra={gLang(`ticketList.activityIntro`)}
-                                            rules={
-                                                ticketType === TicketType.MediaEvents
-                                                    ? [
-                                                          {
-                                                              required: true,
-                                                              message: gLang('required'),
-                                                          },
-                                                      ]
-                                                    : undefined
-                                            }
-                                        >
-                                            <Select onChange={handleQuickInsertChange}>
-                                                {Object.entries(
-                                                    quickInsertConfig[ticketType] || {}
-                                                ).map(([key, item]) => (
-                                                    <Option key={key} value={key}>
-                                                        {gLang(item.titleKey)}
-                                                    </Option>
-                                                ))}
-                                            </Select>
-                                        </Form.Item>
-                                        {selectedQuickInsert &&
+                                        {ticketType === TicketType.MediaEvents ? (
+                                            <>
+                                                <Form.Item
+                                                    name="activity"
+                                                    label={gLang('ticketList.activity')}
+                                                    extra={gLang('ticketList.activityCardIntro')}
+                                                    rules={[
+                                                        {
+                                                            required: true,
+                                                            message: gLang('required'),
+                                                        },
+                                                    ]}
+                                                    hidden
+                                                >
+                                                    <Input />
+                                                </Form.Item>
+                                                {!shouldHideMeActivitySelector && (
+                                                    <div style={{ marginBottom: 16 }}>
+                                                        <Paragraph
+                                                            style={{
+                                                                marginBottom: 10,
+                                                                fontWeight: 600,
+                                                                fontSize: 14,
+                                                            }}
+                                                        >
+                                                            {gLang('ticketList.activity')}
+                                                        </Paragraph>
+                                                        <Row gutter={[12, 12]}>
+                                                            {(
+                                                                [
+                                                                    'ECNET_LIKE',
+                                                                    'ECXHS_POST',
+                                                                    'CLOUD_MATERIAL',
+                                                                    'OTHER',
+                                                                ]
+                                                                    .filter(
+                                                                        key =>
+                                                                            quickInsertConfig[
+                                                                                TicketType.MediaEvents
+                                                                            ]?.[key]
+                                                                    )
+                                                                    .map(key => [
+                                                                        key,
+                                                                        quickInsertConfig[
+                                                                            TicketType.MediaEvents
+                                                                        ]?.[
+                                                                            key
+                                                                        ] as QuickInsertItem,
+                                                                    ]) as Array<
+                                                                    [string, QuickInsertItem]
+                                                                >
+                                                            ).map(([key, item]) => {
+                                                                const cardMeta =
+                                                                    MEDIA_EVENT_CARD_META[key] ?? {
+                                                                        icon: <UploadOutlined />,
+                                                                        color: '#1677ff',
+                                                                        shadow:
+                                                                            'rgba(22, 119, 255, 0.25)',
+                                                                        summaryKey:
+                                                                            'ticketList.activityIntro',
+                                                                    };
+                                                                const isSelected =
+                                                                    selectedQuickInsert === key;
+                                                                return (
+                                                                    <Col
+                                                                        key={key}
+                                                                        xs={24}
+                                                                        sm={12}
+                                                                        md={12}
+                                                                    >
+                                                                        <Button
+                                                                            type="text"
+                                                                            block
+                                                                            onClick={() =>
+                                                                                handleQuickInsertChange(
+                                                                                    key
+                                                                                )
+                                                                            }
+                                                                            style={{
+                                                                                height: 'auto',
+                                                                                borderRadius: 14,
+                                                                                border: isSelected
+                                                                                    ? `1px solid ${cardMeta.color}`
+                                                                                    : '1px solid rgba(0,0,0,0.08)',
+                                                                                boxShadow: isSelected
+                                                                                    ? `0 8px 18px ${cardMeta.shadow}`
+                                                                                    : '0 2px 8px rgba(0,0,0,0.04)',
+                                                                                padding:
+                                                                                    '14px 16px',
+                                                                                textAlign: 'left',
+                                                                            }}
+                                                                        >
+                                                                            <div
+                                                                                style={{
+                                                                                    display: 'flex',
+                                                                                    gap: 10,
+                                                                                    alignItems:
+                                                                                        'flex-start',
+                                                                                }}
+                                                                            >
+                                                                                <span
+                                                                                    style={{
+                                                                                        width: 36,
+                                                                                        height: 36,
+                                                                                        borderRadius: 10,
+                                                                                        display:
+                                                                                            'inline-flex',
+                                                                                        alignItems:
+                                                                                            'center',
+                                                                                        justifyContent:
+                                                                                            'center',
+                                                                                        color: '#fff',
+                                                                                        background:
+                                                                                            cardMeta.color,
+                                                                                    }}
+                                                                                >
+                                                                                    {cardMeta.icon}
+                                                                                </span>
+                                                                                <span>
+                                                                                    <div
+                                                                                        style={{
+                                                                                            fontWeight:
+                                                                                                600,
+                                                                                            color: 'rgba(0,0,0,0.88)',
+                                                                                        }}
+                                                                                    >
+                                                                                        {gLang(
+                                                                                            item.titleKey
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <div
+                                                                                        style={{
+                                                                                            marginTop: 6,
+                                                                                            fontSize: 12,
+                                                                                            color: 'rgba(0,0,0,0.55)',
+                                                                                            lineHeight:
+                                                                                                1.5,
+                                                                                        }}
+                                                                                    >
+                                                                                        {gLang(
+                                                                                            cardMeta.summaryKey
+                                                                                        )}
+                                                                                    </div>
+                                                                                </span>
+                                                                            </div>
+                                                                        </Button>
+                                                                    </Col>
+                                                                );
+                                                            })}
+                                                        </Row>
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <Form.Item
+                                                name="activity"
+                                                label={gLang('ticketList.activity')}
+                                                extra={gLang(`ticketList.activityIntro`)}
+                                                rules={undefined}
+                                            >
+                                                <Select onChange={handleQuickInsertChange}>
+                                                    {Object.entries(
+                                                        quickInsertConfig[ticketType] || {}
+                                                    ).map(([key, item]) => (
+                                                        <Option key={key} value={key}>
+                                                            {gLang(item.titleKey)}
+                                                        </Option>
+                                                    ))}
+                                                </Select>
+                                            </Form.Item>
+                                        )}
+                                        {shouldShowMeActivityFormFields &&
+                                            selectedQuickInsert &&
                                             quickInsertConfig[ticketType]?.[
                                                 selectedQuickInsert
                                             ]?.extraFields?.map(field => {
+                                                if (field.name === 'cloudMaterialPrice') {
+                                                    return null;
+                                                }
                                                 // 根据autoType决定使用哪种组件
                                                 if (field.autoType === 'accountMatch') {
                                                     return (
@@ -1326,7 +1867,8 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                                             )}
                                                         />
                                                     );
-                                                } else {
+                                                }
+                                                if (field.inputType === 'textarea') {
                                                     return (
                                                         <Form.Item
                                                             key={field.name}
@@ -1344,7 +1886,8 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                                                     : undefined
                                                             }
                                                         >
-                                                            <Input
+                                                            <TextArea
+                                                                autoSize={{ minRows: 2 }}
                                                                 placeholder={
                                                                     field.placeholderKey
                                                                         ? gLang(
@@ -1352,13 +1895,149 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                                                           )
                                                                         : undefined
                                                                 }
-                                                                disabled={field.lock || false}
                                                             />
                                                         </Form.Item>
                                                     );
                                                 }
+                                                if (field.inputType === 'select') {
+                                                    return (
+                                                        <Form.Item
+                                                            key={field.name}
+                                                            name={field.name}
+                                                            label={gLang(field.labelKey)}
+                                                            rules={
+                                                                field.required
+                                                                    ? [
+                                                                          {
+                                                                              required: true,
+                                                                              message:
+                                                                                  gLang('required'),
+                                                                          },
+                                                                      ]
+                                                                    : undefined
+                                                            }
+                                                        >
+                                                            <Select
+                                                                placeholder={gLang('required')}
+                                                                onChange={value => {
+                                                                    if (
+                                                                        field.name ===
+                                                                            'cloudMaterialPurchaseMethod' &&
+                                                                        value !== 'ec_coin' &&
+                                                                        value !== 'voucher'
+                                                                    ) {
+                                                                        form.setFieldValue(
+                                                                            'cloudMaterialPrice',
+                                                                            undefined
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {field.options?.map(option => (
+                                                                    <Option
+                                                                        key={option.value}
+                                                                        value={option.value}
+                                                                    >
+                                                                        {gLang(option.labelKey)}
+                                                                    </Option>
+                                                                ))}
+                                                            </Select>
+                                                        </Form.Item>
+                                                    );
+                                                }
+                                                if (field.inputType === 'number') {
+                                                    return (
+                                                        <Form.Item
+                                                            key={field.name}
+                                                            name={field.name}
+                                                            label={gLang(field.labelKey)}
+                                                        >
+                                                            <InputNumber
+                                                                min={field.min}
+                                                                style={{ width: '100%' }}
+                                                                placeholder={
+                                                                    field.placeholderKey
+                                                                        ? gLang(
+                                                                              field.placeholderKey
+                                                                          )
+                                                                        : undefined
+                                                                }
+                                                            />
+                                                        </Form.Item>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <Form.Item
+                                                        key={field.name}
+                                                        name={field.name}
+                                                        label={gLang(field.labelKey)}
+                                                        rules={
+                                                            field.required
+                                                                ? [
+                                                                      {
+                                                                          required: true,
+                                                                          message: gLang('required'),
+                                                                      },
+                                                                  ]
+                                                                : undefined
+                                                        }
+                                                    >
+                                                        <Input
+                                                            placeholder={
+                                                                field.placeholderKey
+                                                                    ? gLang(field.placeholderKey)
+                                                                    : undefined
+                                                            }
+                                                            disabled={field.lock || false}
+                                                        />
+                                                    </Form.Item>
+                                                );
                                             })}
-                                        {selectedQuickInsert &&
+                                        {shouldShowMeActivityFormFields &&
+                                            selectedQuickInsert === 'CLOUD_MATERIAL' &&
+                                            cloudMaterialPurchaseMethod !== 'free' && (
+                                                <Form.Item
+                                                    name="cloudMaterialPrice"
+                                                    label={gLang('ticketList.cloudMaterialPrice')}
+                                                    rules={
+                                                        cloudMaterialPurchaseMethod === 'ec_coin'
+                                                            ? [
+                                                                  {
+                                                                      required: true,
+                                                                      message: gLang('required'),
+                                                                  },
+                                                                  {
+                                                                      type: 'number',
+                                                                      min: 10000,
+                                                                      message: gLang(
+                                                                          'ticketList.cloudMaterialEcCoinPriceMinError'
+                                                                      ),
+                                                                  },
+                                                              ]
+                                                            : [
+                                                                  {
+                                                                      required: true,
+                                                                      message: gLang('required'),
+                                                                  },
+                                                              ]
+                                                    }
+                                                >
+                                                    <InputNumber
+                                                        min={
+                                                            cloudMaterialPurchaseMethod === 'ec_coin'
+                                                                ? 10000
+                                                                : 0
+                                                        }
+                                                        style={{ width: '100%' }}
+                                                        placeholder={gLang(
+                                                            'ticketList.cloudMaterialPricePlaceholder'
+                                                        )}
+                                                    />
+                                                </Form.Item>
+                                            )}
+                                        {shouldShowMeActivityFormFields &&
+                                            selectedQuickInsert &&
                                             quickInsertConfig[ticketType]?.[selectedQuickInsert]
                                                 ?.noteKey && (
                                                 <Paragraph type="secondary">
@@ -1371,10 +2050,15 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                             )}
                                     </>
                                 )}
-                                {![TicketType.ReportPlayer].includes(ticketType) && (
+                                {shouldShowMeActivityFormFields &&
+                                    ![TicketType.ReportPlayer].includes(ticketType) && (
                                     <Form.Item
                                         name="details"
-                                        label={gLang('ticketList.remark')}
+                                        label={
+                                            ticketType === TicketType.MediaEvents
+                                                ? gLang('ticketList.extraSupplement')
+                                                : gLang('ticketList.remark')
+                                        }
                                         extra={gLang(`ticketList.detailsExtra.${ticketType}`)}
                                     >
                                         <TextArea
@@ -1387,85 +2071,106 @@ const TicketForm: React.FC<TicketFormProps> = ({
                                         />
                                     </Form.Item>
                                 )}
-                                <Form.Item
-                                    label={gLang('ticketList.attachments')}
-                                    extra={gLang('ticketList.attachmentsExtra')}
-                                    name="files"
-                                    rules={[
-                                        {
-                                            required: [
-                                                TicketType.ResendProduct,
-                                                TicketType.ReportPlayer,
-                                                TicketType.MediaEvents,
-                                            ].includes(ticketType),
-                                            message: gLang('required'),
-                                        },
-                                    ]}
-                                    valuePropName="fileList"
-                                    getValueFromEvent={e =>
-                                        Array.isArray(e) ? e : e?.fileList || []
-                                    }
-                                >
-                                    <Upload {...uploadProps}>
-                                        <Button
-                                            icon={<UploadOutlined />}
-                                            loading={isUploading}
-                                            disabled={isUploading}
+                                {shouldShowMeActivityFormFields && (
+                                    <>
+                                        <Form.Item
+                                            label={gLang('ticketList.attachments')}
+                                            extra={attachmentExtraText}
+                                            name="files"
+                                            rules={[
+                                                {
+                                                    required: [
+                                                        TicketType.ResendProduct,
+                                                        TicketType.ReportPlayer,
+                                                        TicketType.MediaEvents,
+                                                    ].includes(ticketType),
+                                                    message: gLang('required'),
+                                                },
+                                            ]}
+                                            valuePropName="fileList"
+                                            getValueFromEvent={e =>
+                                                Array.isArray(e) ? e : e?.fileList || []
+                                            }
                                         >
-                                            {isUploading
-                                                ? gLang('files.uploadingText')
-                                                : gLang('files.btn')}
-                                        </Button>
-                                    </Upload>
-                                </Form.Item>
-                                <Form.Item>
-                                    <Button
-                                        type="primary"
-                                        onClick={handleSubmitClick}
-                                        disabled={
-                                            isUploading || isSubmitBtnDisabled || isFormDisabled
-                                        }
-                                    >
-                                        {submitBtnText}
-                                    </Button>
-                                    <Button
-                                        onClick={handleClear}
-                                        disabled={isFormDisabled}
-                                        style={{ marginLeft: 8 }}
-                                    >
-                                        {gLang('ticketList.clear')}
-                                    </Button>
-                                    {/* ME工单媒体账号状态提示 */}
-                                    {ticketType === TicketType.MediaEvents && mediaStatusError && (
-                                        <div style={{ marginTop: '8px' }}>
-                                            {mediaStatusError === 'no_media_account' && (
-                                                <div style={{ color: '#ff4d4f', fontSize: '14px' }}>
-                                                    {gLang(
-                                                        'ticketList.mediaStatusError.noMediaAccount'
-                                                    )}
-                                                    <Link
-                                                        to="/media"
-                                                        style={{
-                                                            marginLeft: '8px',
-                                                            color: '#1890ff',
-                                                        }}
-                                                    >
-                                                        {gLang(
-                                                            'ticketList.mediaStatusError.goToMediaCenter'
+                                            <Upload {...uploadProps}>
+                                                <Button
+                                                    icon={<UploadOutlined />}
+                                                    loading={isUploading}
+                                                    disabled={isUploading}
+                                                >
+                                                    {isUploading
+                                                        ? gLang('files.uploadingText')
+                                                        : gLang('files.btn')}
+                                                </Button>
+                                            </Upload>
+                                        </Form.Item>
+                                        <Form.Item>
+                                            <Button
+                                                type="primary"
+                                                onClick={handleSubmitClick}
+                                                disabled={
+                                                    isUploading ||
+                                                    isSubmitBtnDisabled ||
+                                                    isFormDisabled ||
+                                                    isSubmitFlowLocked
+                                                }
+                                            >
+                                                {submitBtnText}
+                                            </Button>
+                                            <Button
+                                                onClick={handleClear}
+                                                disabled={isFormDisabled || isSubmitFlowLocked}
+                                                style={{ marginLeft: 8 }}
+                                            >
+                                                {gLang('ticketList.clear')}
+                                            </Button>
+                                            {/* ME工单媒体账号状态提�?*/}
+                                            {ticketType === TicketType.MediaEvents &&
+                                                selectedQuickInsert !== 'CLOUD_MATERIAL' &&
+                                                mediaStatusError && (
+                                                    <div style={{ marginTop: '8px' }}>
+                                                        {mediaStatusError ===
+                                                            'no_media_account' && (
+                                                            <div
+                                                                style={{
+                                                                    color: '#ff4d4f',
+                                                                    fontSize: '14px',
+                                                                }}
+                                                            >
+                                                                {gLang(
+                                                                    'ticketList.mediaStatusError.noMediaAccount'
+                                                                )}
+                                                                <Link
+                                                                    to="/media"
+                                                                    style={{
+                                                                        marginLeft: '8px',
+                                                                        color: '#1890ff',
+                                                                    }}
+                                                                >
+                                                                    {gLang(
+                                                                        'ticketList.mediaStatusError.goToMediaCenter'
+                                                                    )}
+                                                                </Link>
+                                                            </div>
                                                         )}
-                                                    </Link>
-                                                </div>
-                                            )}
-                                            {mediaStatusError === 'invalid_media_status' && (
-                                                <div style={{ color: '#ff4d4f', fontSize: '14px' }}>
-                                                    {gLang(
-                                                        'ticketList.mediaStatusError.invalidMediaStatus'
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </Form.Item>
+                                                        {mediaStatusError ===
+                                                            'invalid_media_status' && (
+                                                            <div
+                                                                style={{
+                                                                    color: '#ff4d4f',
+                                                                    fontSize: '14px',
+                                                                }}
+                                                            >
+                                                                {gLang(
+                                                                    'ticketList.mediaStatusError.invalidMediaStatus'
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                        </Form.Item>
+                                    </>
+                                )}
                             </>
                         )}
                     </Form>
@@ -1476,3 +2181,8 @@ const TicketForm: React.FC<TicketFormProps> = ({
 };
 
 export default TicketForm;
+
+
+
+
+

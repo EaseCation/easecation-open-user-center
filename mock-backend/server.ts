@@ -6,8 +6,10 @@ import cors from 'cors';
 dotenv.config({ path: path.join(__dirname, '.env') });
 
 const PORT = Number(process.env.MOCK_BACKEND_PORT || process.env.PORT || 9000);
-const FRONTEND_USER_URL = process.env.MOCK_FRONTEND_USER_URL || 'http://localhost:9001';
-const FRONTEND_ADMIN_URL = process.env.MOCK_FRONTEND_ADMIN_URL || 'http://localhost:9002';
+const FRONTEND_USER_URL = process.env.MOCK_FRONTEND_USER_URL || 'http://localhost:9101';
+const FRONTEND_ADMIN_URL = process.env.MOCK_FRONTEND_ADMIN_URL || 'http://localhost:9102';
+const MOCK_PLAYGROUND_E2E_KEY =
+    process.env.MOCK_PLAYGROUND_E2E_BOOTSTRAP_KEY || 'mock-playground-key';
 
 // 工具函数
 const nowIso = () => new Date().toISOString();
@@ -32,6 +34,12 @@ const ok = (extra = {}) => ({
     EPF_code: 200,
     EPF_description: '成功',
     ...extra,
+});
+
+const permissionDenied = message => ({
+    EPF_code: 403,
+    EPF_description: message || '无权限访问',
+    message: message || '无权限访问',
 });
 
 const base64UrlEncode = text =>
@@ -132,12 +140,21 @@ const MOCK_MEDIA_USER = {
     createTime: '2025-01-01 00:00:00',
 };
 
+const FEEDBACK_TITLE_PREFIX = '反馈: ';
+
+const toEditableFeedbackTitle = title =>
+    String(title || '')
+        .replace(/^反馈:\s*/, '')
+        .trim();
+
+const toStoredFeedbackTitle = title => `${FEEDBACK_TITLE_PREFIX}${toEditableFeedbackTitle(title)}`;
+
 // 初始数据定义
 const initialFeedback = {
-    tid: 9001,
+    tid: 9101,
     priority: 95,
     type: 'GU',
-    title: '希望增加新手教程引导',
+    title: toStoredFeedbackTitle('希望增加新手教程引导'),
     creator_openid: MOCK_USER.openid,
     initiator: MOCK_PLAYER.ecid,
     target: 'feedback',
@@ -145,6 +162,7 @@ const initialFeedback = {
     status: 'O',
     create_time: nowText(),
     advisor_uid: '10086',
+    isPublic: true,
     publicTags: [
         {
             id: 1,
@@ -164,8 +182,8 @@ const initialFeedback = {
     replyCount: 2,
     details: [
         {
-            id: 90010,
-            tid: 9001,
+            id: 91010,
+            tid: 9101,
             displayTitle: '玩家',
             action: 'R',
             content: '希望首页加一个新手流程卡片，减少上手门槛。',
@@ -177,8 +195,8 @@ const initialFeedback = {
             isOfficial: false,
         },
         {
-            id: 90011,
-            tid: 9001,
+            id: 91011,
+            tid: 9101,
             displayTitle: '反馈客服',
             action: 'R',
             operator: '官方',
@@ -647,6 +665,48 @@ app.get('/user/info', (_req, res) => {
     res.json(clone(MOCK_USER));
 });
 
+app.post('/user/e2e/bootstrap-auth', (req, res) => {
+    const headerKey = String(req.headers['x-e2e-key'] || '').trim();
+    const bearerKey = String(req.headers.authorization || '').startsWith('Bearer ')
+        ? String(req.headers.authorization).slice('Bearer '.length).trim()
+        : '';
+    const providedKey = headerKey || bearerKey;
+
+    if (providedKey && providedKey !== MOCK_PLAYGROUND_E2E_KEY) {
+        res.status(401).json({
+            EPF_code: 8003,
+            EPF_description: 'Token无效',
+            message: 'E2E bootstrap key 无效',
+        });
+        return;
+    }
+
+    const role = req.body?.role === 'admin' ? 'admin' : 'user';
+    const base = role === 'admin' ? FRONTEND_ADMIN_URL : FRONTEND_USER_URL;
+    const returnTo =
+        typeof req.body?.returnTo === 'string' && req.body.returnTo.startsWith('/')
+            ? req.body.returnTo
+            : role === 'admin'
+              ? '/ticket/query'
+              : '/ticket';
+    const state = base64UrlEncode(JSON.stringify({ return_to: returnTo }));
+    const token = role === 'admin' ? 'mock-admin-jwt-token' : 'mock-user-jwt-token';
+
+    res.json(
+        ok({
+            role,
+            token,
+            expire: Math.floor(Date.now() / 1000) + 7200,
+            redirectUrl: `${base}/login/callback?token=${encodeURIComponent(token)}&state=${encodeURIComponent(state)}`,
+            returnTo,
+            openid: role === 'admin' ? `NexaId_${MOCK_USER.userid}` : MOCK_USER.openid,
+            userid: String(MOCK_USER.userid),
+            permission: role === 'admin' ? clone(MOCK_USER.permission) : [],
+            ecid: role === 'user' ? MOCK_PLAYER.ecid : undefined,
+        })
+    );
+});
+
 app.post('/user/refresh', (_req, res) => {
     res.json(
         ok({
@@ -989,6 +1049,10 @@ app.post('/ec/fast-action', (req, res) => {
     res.json(ok({ message: '快捷操作执行成功(mock)' }));
 });
 
+app.post('/ec/punish-copy-mail', (_req, res) => {
+    res.json(ok({ message: '处罚抄送邮件发送成功(mock)' }));
+});
+
 app.get('/ec/ticket-logs', (req, res) => {
     const ecid = String(req.query.ecid || MOCK_PLAYER.ecid);
     const inMock = EC_DETAIL_MOCKS.some(p => p.ecid === ecid);
@@ -1193,9 +1257,23 @@ app.get('/ec/gamelog/match-details', (req, res) => {
             roomOwner: 'mock_owner',
         },
         players: [
-            { _id: 'mock-p1', sessionId, ecId: MOCK_PLAYER.ecid, playerAlias: MOCK_PLAYER.name, winTeam: true, rank: 0, kills: 1, deaths: 0 },
+            {
+                _id: 'mock-p1',
+                sessionId,
+                ecId: MOCK_PLAYER.ecid,
+                playerAlias: MOCK_PLAYER.name,
+                winTeam: true,
+                rank: 0,
+                kills: 1,
+                deaths: 0,
+            },
         ],
-        log: [{ time: nowIso(), events: [{ chat: { ecId: MOCK_PLAYER.ecid, message: '[mock] message' } }] }],
+        log: [
+            {
+                time: nowIso(),
+                events: [{ chat: { ecId: MOCK_PLAYER.ecid, message: '[mock] message' } }],
+            },
+        ],
     };
     res.json(ok({ data: payload }));
 });
@@ -1204,7 +1282,12 @@ app.get('/ec/gamelog/players', (req, res) => {
     const current = toInt(req.query.current, 1);
     const pageSize = toInt(req.query.pageSize, 20);
     const data = [
-        { _id: 'mock-pl-1', sessionId: 'mock-session-uuid-001', ecId: MOCK_PLAYER.ecid, playerAlias: MOCK_PLAYER.name },
+        {
+            _id: 'mock-pl-1',
+            sessionId: 'mock-session-uuid-001',
+            ecId: MOCK_PLAYER.ecid,
+            playerAlias: MOCK_PLAYER.name,
+        },
     ];
     res.json(ok({ data, pagination: { total: 1, current, pageSize } }));
 });
@@ -1217,7 +1300,11 @@ app.get('/ec/gamelog/pit/sessions', (req, res) => {
 
 app.get('/ec/gamelog/pit/session-details', (req, res) => {
     const id = String(req.query.id || 'mock-pit-id');
-    res.json(ok({ data: { session: { _id: id, serverName: 'pit', playerAlias: 'mock_player' }, log: [] } }));
+    res.json(
+        ok({
+            data: { session: { _id: id, serverName: 'pit', playerAlias: 'mock_player' }, log: [] },
+        })
+    );
 });
 
 app.get('/ec/ban', (req, res) => {
@@ -1373,6 +1460,13 @@ app.get('/ticket/detail', (req, res) => {
 
 app.post('/ticket/new', (req, res) => {
     const type = String(req.body?.type || 'OT');
+    const account = String(req.body?.account || '').trim();
+
+    if (type === 'JY' && !account) {
+        res.json({ EPF_code: 2001, message: '策划信箱工单必须选择一个已绑定的 ECID' });
+        return;
+    }
+
     const fallbackTitle = String(req.body?.title || '新建工单(mock)');
     const title =
         type === 'RP'
@@ -1382,6 +1476,7 @@ app.post('/ticket/new', (req, res) => {
     const files = Array.isArray(req.body?.files) ? req.body.files : [];
     const newTid = Math.max(...state.tickets.map(ticket => ticket.tid)) + 1;
     const newTicket = buildTicket(newTid, type, title, 'O');
+    newTicket.initiator = account || newTicket.initiator;
     newTicket.details = [
         {
             id: Date.now() % 100000,
@@ -1595,7 +1690,7 @@ app.get('/ticket/adminRecruitmentTime', (_req, res) => {
 app.post('/ticket/generate-share-token', (req, res) => {
     const tid = toInt(req.body?.tid, 1001);
     const token = 'mocktoken';
-    const baseUrl = process.env.MOCK_FRONTEND_USER_URL || 'http://localhost:9001';
+    const baseUrl = process.env.MOCK_FRONTEND_USER_URL || 'http://localhost:9101';
     const url = `${baseUrl.replace(/\/$/, '')}/tksnapshot/${tid}?token=${token}`;
     res.json(ok({ token, url }));
 });
@@ -1717,7 +1812,47 @@ app.get('/media/epoints/logs', (req, res) => {
 
 // ---------------------------- 商品相关 ----------------------------
 
-const shopProducts = [
+type ShopSpinPreview = {
+    remaining_chances?: number;
+    shared_today?: number;
+    daily_share_limit?: number;
+    chance_per_share?: number;
+    rewards?: unknown[];
+};
+
+type ShopLotteryConfig = {
+    draw_at?: string;
+    drawn_at?: string;
+    winner_count?: number;
+    winners?: unknown[];
+};
+
+type ShopProduct = {
+    id: number;
+    title: string;
+    json: string;
+    price: number;
+    detail: string;
+    total_limit: number;
+    monthly_limit: number;
+    global_limit: number;
+    permanent_limit: number;
+    is_vip: number;
+    is_hidden: number;
+    sales_monthly: number;
+    limit_sales: number;
+    current_month_sales: number;
+    sales: number;
+    base_price: number;
+    extra_config: {
+        product_mode?: string;
+        lottery?: ShopLotteryConfig;
+        [key: string]: unknown;
+    } | null;
+    spin_preview?: ShopSpinPreview;
+};
+
+const shopProducts: ShopProduct[] = [
     {
         id: 101,
         title: '称号：开源先锋',
@@ -1734,6 +1869,8 @@ const shopProducts = [
         limit_sales: 1,
         current_month_sales: 1,
         sales: 12,
+        base_price: 30,
+        extra_config: null,
     },
     {
         id: 102,
@@ -1751,6 +1888,14 @@ const shopProducts = [
         limit_sales: 0,
         current_month_sales: 0,
         sales: 20,
+        base_price: 88,
+        extra_config: {
+            product_mode: 'lottery',
+            lottery: {
+                draw_at: '2026-04-15T12:00:00.000Z',
+                winner_count: 2,
+            },
+        },
     },
 ];
 
@@ -1784,24 +1929,78 @@ app.post('/item/purchase', (req, res) => {
     );
 });
 
+app.post('/item/spin/:ID/share', (req, res) => {
+    const itemId = toInt(req.params.ID, 101);
+    const product = shopProducts.find(item => item.id === itemId) || shopProducts[0];
+    const current = Number(product?.spin_preview?.remaining_chances || 0);
+    if (product) {
+        product.spin_preview = {
+            ...(product.spin_preview || {}),
+            remaining_chances: current + 1,
+            shared_today: Number(product.spin_preview?.shared_today || 0) + 1,
+            daily_share_limit: Number(product.spin_preview?.daily_share_limit || 1),
+            chance_per_share: Number(product.spin_preview?.chance_per_share || 1),
+            rewards: clone(product.spin_preview?.rewards || []),
+        };
+    }
+    res.json(ok({ data: { remainingChances: current + 1 } }));
+});
+
+app.post('/item/spin/:ID/draw', (req, res) => {
+    const itemId = toInt(req.params.ID, 101);
+    const product = shopProducts.find(item => item.id === itemId) || shopProducts[0];
+    const rewards = clone(product?.spin_preview?.rewards || []);
+    const reward = rewards[0] || null;
+    const current = Number(product?.spin_preview?.remaining_chances || 1);
+    if (product) {
+        product.spin_preview = {
+            ...(product.spin_preview || {}),
+            remaining_chances: Math.max(0, current - 1),
+            shared_today: Number(product.spin_preview?.shared_today || 0),
+            daily_share_limit: Number(product.spin_preview?.daily_share_limit || 1),
+            chance_per_share: Number(product.spin_preview?.chance_per_share || 1),
+            rewards,
+        };
+    }
+    res.json(ok({ data: { reward, remainingChances: Math.max(0, current - 1) } }));
+});
+
 app.get('/item/purchase-logs/my', (req, res) => {
     const page = toInt(req.query.page, 1);
     const pageSize = toInt(req.query.pageSize, 10);
     const list = [
         {
             id: 1,
+            item_id: 101,
             ecid: MOCK_PLAYER.ecid,
             item_title: '称号：开源先锋',
             quantity: 1,
             total_price: 30,
+            product_mode: 'normal',
             created_at: nowIso(),
         },
         {
             id: 2,
+            item_id: 102,
             ecid: MOCK_PLAYER.ecid,
             item_title: '外观：星辰斗篷',
             quantity: 1,
             total_price: 88,
+            product_mode: 'lottery',
+            lottery_status: 'pending',
+            lottery_result: null,
+            created_at: nowIso(),
+        },
+        {
+            id: 3,
+            item_id: 103,
+            ecid: MOCK_PLAYER.ecid,
+            item_title: '抽奖：春日礼盒',
+            quantity: 1,
+            total_price: 20,
+            product_mode: 'lottery',
+            lottery_status: 'drawn',
+            lottery_result: 'won',
             created_at: nowIso(),
         },
     ];
@@ -1842,6 +2041,32 @@ app.get('/item/manager/search', (req, res) => {
     res.json(ok({ data: clone(data) }));
 });
 
+app.post('/item/lottery/:ID/draw', (req, res) => {
+    const id = toInt(req.params.ID, 0);
+    const item = shopProducts.find(product => product.id === id);
+    if (!item) {
+        res.json(ok({ data: { winners: [] } }));
+        return;
+    }
+    const winners = [
+        {
+            openid: 'mock-openid-1',
+            quantity: 2,
+            wonAt: nowIso(),
+        },
+    ];
+    item.extra_config = {
+        ...(item.extra_config || {}),
+        lottery: {
+            ...(item.extra_config?.lottery || {}),
+            drawn_at: nowIso(),
+            winners,
+        },
+    };
+    item.is_hidden = 1;
+    res.json(ok({ data: { winners } }));
+});
+
 app.post('/item/addItem', (req, res) => {
     const payload = req.body || {};
     const newId = Math.max(...shopProducts.map(item => item.id)) + 1;
@@ -1861,6 +2086,8 @@ app.post('/item/addItem', (req, res) => {
         limit_sales: 0,
         current_month_sales: 0,
         sales: 0,
+        base_price: Number(payload.price || 1),
+        extra_config: payload.extra_config || null,
     });
     res.json(ok({ id: newId }));
 });
@@ -2101,7 +2328,9 @@ const applyMockAdvancedFilters = (items, filters) =>
                     column
                 )
             ) {
-                const tagIds = getMockAdvancedFilterTagList(item, column).map(tag => Number(tag.id));
+                const tagIds = getMockAdvancedFilterTagList(item, column).map(tag =>
+                    Number(tag.id)
+                );
                 const expectedIds = parseIntArray(values);
 
                 if (operator === 'equals') {
@@ -2214,7 +2443,8 @@ const buildMockFeedbackSummary = items => {
         target.push(
             ...[...countMap.values()].sort(
                 (left, right) =>
-                    right.count - left.count || String(left.tag.name).localeCompare(String(right.tag.name), 'zh-Hans-CN')
+                    right.count - left.count ||
+                    String(left.tag.name).localeCompare(String(right.tag.name), 'zh-Hans-CN')
             )
         );
     };
@@ -2260,6 +2490,7 @@ app.get('/feedback/list', (req, res) => {
         .toLowerCase();
     const publicTagIds = parseIntArray(req.query.publicTagIds || req.query['publicTagIds[]']);
     const all = state.feedbacks
+        .filter(ticket => ticket.isPublic !== false)
         .filter(ticket =>
             publicTagIds.length > 0
                 ? (ticket.publicTags || []).some(tag => publicTagIds.includes(tag.id))
@@ -2281,7 +2512,9 @@ app.get('/feedback/admin/list', (req, res) => {
     );
     const progressTagIds = parseIntArray(req.query.progressTagIds || req.query['progressTagIds[]']);
     const noProgressTag = String(req.query.noProgressTag || '') === 'true';
-    const feedbackType = String(req.query.type || '').trim().toUpperCase();
+    const feedbackType = String(req.query.type || '')
+        .trim()
+        .toUpperCase();
     const statusFilters = parseMockStatusFilters(req.query.status);
     const advancedFilters = normalizeMockAdvancedFilters(req.query.advancedFilters);
     const sortBy = ['createTime', 'lastReplyTime', 'heat'].includes(String(req.query.sortBy || ''))
@@ -2319,7 +2552,9 @@ app.get('/feedback/admin/list', (req, res) => {
         all = all.filter(ticket => ticket.feedbackType === feedbackType);
     }
     if (statusFilters.length > 0) {
-        all = all.filter(ticket => statusFilters.includes(normalizeMockFeedbackStatus(ticket.status)));
+        all = all.filter(ticket =>
+            statusFilters.includes(normalizeMockFeedbackStatus(ticket.status))
+        );
     }
     if (keyword) {
         all = all.filter(item => item.title.toLowerCase().includes(keyword));
@@ -2336,12 +2571,14 @@ app.get('/feedback/admin/list', (req, res) => {
         if (sortBy === 'lastReplyTime') {
             return (
                 ((new Date(left.lastReplyTime || left.create_time).getTime() || 0) -
-                    (new Date(right.lastReplyTime || right.create_time).getTime() || 0)) * factor
+                    (new Date(right.lastReplyTime || right.create_time).getTime() || 0)) *
+                factor
             );
         }
         return (
             ((new Date(left.create_time).getTime() || 0) -
-                (new Date(right.create_time).getTime() || 0)) * factor
+                (new Date(right.create_time).getTime() || 0)) *
+            factor
         );
     });
 
@@ -2396,7 +2633,9 @@ app.post('/feedback/admin/tags', (req, res) => {
         : 'PUBLIC';
     const aliasOfTagId = req.body?.aliasOfTagId == null ? null : toInt(req.body.aliasOfTagId, 0);
     const primaryTag =
-        aliasOfTagId && aliasOfTagId > 0 ? resolveMockPrimaryTag(findMockTagById(aliasOfTagId)) : null;
+        aliasOfTagId && aliasOfTagId > 0
+            ? resolveMockPrimaryTag(findMockTagById(aliasOfTagId))
+            : null;
     const created = ensureMockTag(req.body?.name, scope, primaryTag?.id || null);
     res.json(
         ok({
@@ -2405,7 +2644,9 @@ app.post('/feedback/admin/tags', (req, res) => {
             scope: created.scope,
             status: created.status,
             aliasOfTagId: created.aliasOfTagId,
-            aliasOfTagName: created.aliasOfTagId ? resolveMockPrimaryTag(created)?.name || null : null,
+            aliasOfTagName: created.aliasOfTagId
+                ? resolveMockPrimaryTag(created)?.name || null
+                : null,
             aliases: getMockTagAliases(created.id),
         })
     );
@@ -2491,6 +2732,10 @@ app.get('/feedback/subscriptions/by-openid', (_req, res) => {
 app.get('/feedback/detail', (req, res) => {
     const tid = toInt(req.query.tid, initialFeedback.tid);
     const found = state.feedbacks.find(ticket => ticket.tid === tid) || state.feedbacks[0];
+    if (found?.isPublic === false && !req.headers.authorization) {
+        res.json(permissionDenied('您没有权限访问此反馈'));
+        return;
+    }
     res.json(clone(found));
 });
 
@@ -2557,7 +2802,7 @@ app.post('/feedback/create', (req, res) => {
     const nextTid = Math.max(...state.feedbacks.map(ticket => ticket.tid), initialFeedback.tid) + 1;
     const created = clone(initialFeedback);
     created.tid = nextTid;
-    created.title = String(req.body?.title || `反馈 ${nextTid}`);
+    created.title = toStoredFeedbackTitle(String(req.body?.title || `${nextTid}`));
     created.create_time = nowText();
     created.details = [
         {
@@ -2589,7 +2834,7 @@ app.post('/feedback/create-from-ticket', (req, res) => {
     const nextTid = Math.max(...state.feedbacks.map(ticket => ticket.tid), initialFeedback.tid) + 1;
     const created = clone(initialFeedback);
     created.tid = nextTid;
-    created.title = String(req.body?.title || `反馈 ${nextTid}`);
+    created.title = toStoredFeedbackTitle(String(req.body?.title || `${nextTid}`));
     created.create_time = nowText();
     created.details = [
         {
@@ -2662,6 +2907,7 @@ app.get('/feedback/meta', (req, res) => {
     res.json(
         ok({
             tid,
+            title: toEditableFeedbackTitle(ticket?.title || ''),
             publicTags: clone(ticket?.publicTags || []),
             internalTags: clone(ticket?.internalTags || []),
             developerTags: clone(ticket?.developerTags || []),
@@ -2674,6 +2920,18 @@ app.get('/feedback/meta', (req, res) => {
 
 app.post('/feedback/meta', (_req, res) => {
     res.json(ok({ message: '元数据更新成功(mock)' }));
+});
+
+app.post('/feedback/title', (req, res) => {
+    const tid = toInt(req.body?.tid, initialFeedback.tid);
+    const ticket = state.feedbacks.find(item => item.tid === tid);
+    const title = toEditableFeedbackTitle(req.body?.title || '');
+    if (ticket && title) {
+        ticket.title = toStoredFeedbackTitle(title);
+        res.json(ok({ title }));
+        return;
+    }
+    res.json(ok({ title }));
 });
 
 app.post('/feedback/subscribe-for-user', (_req, res) => {

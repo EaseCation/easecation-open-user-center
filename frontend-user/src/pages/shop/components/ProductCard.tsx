@@ -35,23 +35,25 @@ const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
     const { token } = theme.useToken();
     const { getThemeColor, customTheme, isCustomThemeActive } = useTheme();
+    const isMobile = !!screens?.xs;
+    const isTablet = !screens?.xs && !!screens?.md && !screens?.xl;
     const palette = CUSTOM_THEME_PALETTES.blackOrange;
     const isBlackOrangeActive = isCustomThemeActive && customTheme === 'blackOrange';
     const [isHover, setIsHover] = useState(false);
     const cardBackground = getThemeColor({
-        light: token.colorBgContainer,
-        dark: token.colorBgContainer,
+        light: 'rgba(255, 255, 255, 0.94)',
+        dark: 'rgba(28, 28, 28, 0.94)',
         custom: { blackOrange: palette.surface },
     });
     const cardBorder = getThemeColor({
-        light: token.colorBorderSecondary,
-        dark: '#303030',
-        custom: { blackOrange: palette.border },
+        light: 'rgba(15, 23, 42, 0.06)',
+        dark: 'rgba(255, 255, 255, 0.08)',
+        custom: { blackOrange: 'rgba(255, 140, 26, 0.12)' },
     });
-    const cardHoverBorder = isBlackOrangeActive ? palette.accent : token.colorPrimaryBorderHover;
+    const cardHoverBorder = isBlackOrangeActive ? palette.accent : 'rgba(59, 130, 246, 0.28)';
     const cardShadow = isBlackOrangeActive
-        ? '0 16px 42px rgba(255, 140, 26, 0.16)'
-        : token.boxShadow;
+        ? '0 18px 38px rgba(255, 140, 26, 0.16)'
+        : '0 14px 34px rgba(15, 23, 42, 0.08)';
     const titleColor = getThemeColor({
         light: token.colorText,
         dark: token.colorText,
@@ -83,10 +85,27 @@ const ProductCard: React.FC<ProductCardProps> = ({
         custom: { blackOrange: palette.accent },
     });
     const imageBackground = getThemeColor({
-        light: token.colorFillTertiary,
-        dark: token.colorFillTertiary,
+        light: '#f5f7fb',
+        dark: 'rgba(255, 255, 255, 0.04)',
         custom: { blackOrange: palette.surfaceAlt },
     });
+    const pricingPreview = product.pricing_preview;
+    const basePrice = Number(pricingPreview?.base_price ?? product.price ?? 0);
+    const currentPrice = Number(product.price ?? 0);
+    const discountRate =
+        pricingPreview?.mode === 'market' && basePrice > 0 && currentPrice < basePrice
+            ? `${((currentPrice / basePrice) * 10).toFixed(1)}${gLang('shop.discountSuffix')}`
+            : null;
+    const promoBadgeText =
+        pricingPreview?.mode === 'market'
+            ? discountRate ?? gLang('shop.surprisePriceTag')
+            : pricingPreview?.mode === 'discriminatory'
+              ? gLang('shop.exclusivePriceTag')
+              : null;
+    const promoBadgeColor =
+        pricingPreview?.mode === 'market'
+            ? 'linear-gradient(135deg, #ff7a18 0%, #ff3d54 100%)'
+            : 'linear-gradient(135deg, #f7d774 0%, #d99100 100%)';
 
     return (
         <Card
@@ -103,28 +122,28 @@ const ProductCard: React.FC<ProductCardProps> = ({
             }}
             styles={{
                 body: {
-                    padding: screens.xs ? 8 : 12,
-                    paddingBottom: screens.xs ? 26 : 24, // 为右下角销量浮层预留空间，避免与ID行重叠
-                    minHeight: screens.xs ? 100 : 90,
+                    padding: isMobile ? 14 : isTablet ? 16 : 18,
+                    paddingBottom: isMobile ? 32 : isTablet ? 24 : 30,
+                    minHeight: isMobile ? 150 : isTablet ? 160 : 176,
                     display: 'flex',
-                    flexDirection: screens.xs ? 'column' : 'row',
-                    gap: screens.xs ? 6 : 8,
+                    flexDirection: 'row',
+                    gap: isMobile ? 12 : isTablet ? 12 : 14,
                     cursor: 'pointer',
-                    borderRadius: 6,
+                    borderRadius: 18,
                     overflow: 'hidden',
                     background: cardBackground,
                 },
             }}
             style={{
-                transition: 'all 0.2s ease',
+                transition: 'all 0.25s ease',
                 position: 'relative',
                 border: `1px solid ${cardBorder}`,
                 borderColor: isHover ? cardHoverBorder : cardBorder,
-                borderRadius: 8,
-                minWidth: screens.xs ? '260px' : 'auto',
-                width: screens.xs ? '100%' : 'auto',
-                boxShadow: isHover ? cardShadow : undefined,
-                transform: isHover ? 'translateY(-1px)' : undefined,
+                borderRadius: 20,
+                minWidth: isMobile ? '100%' : 'auto',
+                width: isMobile ? '100%' : 'auto',
+                boxShadow: isHover ? cardShadow : '0 6px 22px rgba(15, 23, 42, 0.05)',
+                transform: isHover ? 'translateY(-4px)' : undefined,
                 willChange: 'transform, box-shadow, border-color',
                 zIndex: isHover ? 1 : 0,
                 background: cardBackground,
@@ -134,49 +153,78 @@ const ProductCard: React.FC<ProductCardProps> = ({
             <div
                 style={{
                     position: 'absolute',
-                    top: screens.xs ? 6 : 6,
-                    right: screens.xs ? 6 : 6,
-                    zIndex: 10,
+                    inset: 0,
+                    borderRadius: 20,
+                    background: isHover
+                        ? 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 36%, rgba(255,255,255,0.1) 100%)'
+                        : 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 36%, rgba(255,255,255,0.04) 100%)',
                     pointerEvents: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: screens.xs ? 4 : 6,
-                    flexDirection: 'row',
+                    opacity: isHover ? 1 : 0.72,
+                    transition: 'opacity 0.25s ease',
                 }}
-            >
+            />
+            {!isMobile && (
+                <div
+                    style={{
+                        position: 'absolute',
+                        top: 6,
+                        right: 6,
+                        zIndex: 10,
+                        pointerEvents: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        flexDirection: 'row',
+                    }}
+                >
                 {product.is_vip === 1 && (
                     <Tag
                         color="warning"
                         style={{
-                            fontSize: screens.xs ? 8 : 10,
+                            fontSize: 10,
                             fontWeight: '500',
-                            borderRadius: screens.xs ? 6 : 12,
-                            padding: screens.xs ? '2px 6px' : '4px 8px',
-                            lineHeight: screens.xs ? '1.2' : '1.4',
-                            maxWidth: screens.xs ? '60px' : 'auto',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
+                            borderRadius: 12,
+                            padding: '4px 8px',
+                            lineHeight: '1.4',
                             flexShrink: 0,
                         }}
                     >
-                        {screens.xs
-                            ? gLang('shop.executiveLimitShort')
-                            : gLang('shop.executiveLimit')}
+                        {gLang('shop.executiveLimit')}
+                    </Tag>
+                )}
+                {product.extra_config?.product_mode === 'lottery' && (
+                    <Tag color="processing" style={{ margin: 0 }}>
+                        {gLang('shop.lotteryTag')}
+                    </Tag>
+                )}
+                {product.extra_config?.product_mode === 'spin_lottery' && (
+                    <Tag color="purple" style={{ margin: 0 }}>
+                        {gLang('shop.spinLotteryTag')}
+                    </Tag>
+                )}
+                {product.pricing_preview?.mode === 'market' && (
+                    <Tag color="volcano" style={{ margin: 0 }}>
+                        {gLang('shop.surprisePriceTag')}
+                    </Tag>
+                )}
+                {product.pricing_preview?.mode === 'discriminatory' && (
+                    <Tag color="gold" style={{ margin: 0 }}>
+                        {gLang('shop.exclusivePriceTag')}
                     </Tag>
                 )}
                 <Text
                     style={{
                         color: priceColor,
                         fontWeight: 600,
-                        fontSize: screens.xs ? 12 : 14,
+                        fontSize: 14,
                         whiteSpace: 'nowrap',
                         flexShrink: 0,
                     }}
                 >
                     {Number(product.price || 0)}
                 </Text>
-            </div>
+                </div>
+            )}
             {/* 自定义操作区域（可选） */}
             {actions && (
                 <div
@@ -196,38 +244,98 @@ const ProductCard: React.FC<ProductCardProps> = ({
                 </div>
             )}
             {/* 手机端布局 */}
-            {screens.xs ? (
+            {isMobile ? (
                 <>
                     {/* 第一行：图片 + 右侧信息区（标题与价格同行、描述单行） */}
                     <div
                         style={{
                             display: 'flex',
-                            gap: screens.xs ? 8 : 10,
+                            gap: isMobile ? 8 : 10,
                             alignItems: 'flex-start',
                         }}
                     >
-                        <SafeImage
-                            src={itemImage}
-                            alt={product.title}
-                            style={{
-                                width: screens.xs ? 56 : 60,
-                                height: screens.xs ? 56 : 60,
-                                objectFit: 'contain',
-                                borderRadius: 6,
-                                flexShrink: 0,
-                                background: imageBackground,
-                            }}
-                        />
+                        <div style={{ position: 'relative', flexShrink: 0 }}>
+                            <SafeImage
+                                src={itemImage}
+                                alt={product.title}
+                                style={{
+                                    width: isMobile ? 88 : 96,
+                                    height: isMobile ? 88 : 96,
+                                    objectFit: 'contain',
+                                    borderRadius: 16,
+                                    flexShrink: 0,
+                                    background: imageBackground,
+                                    transform: isHover ? 'scale(1.05) translateY(-2px)' : 'scale(1)',
+                                    transition: 'transform 0.28s ease',
+                                }}
+                            />
+                            {promoBadgeText && (
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        top: -8,
+                                        left: -10,
+                                        padding: isMobile ? '3px 8px' : '4px 10px',
+                                        borderRadius: 999,
+                                        background: promoBadgeColor,
+                                        color: '#fff',
+                                        fontSize: isMobile ? 10 : 11,
+                                        fontWeight: 700,
+                                        lineHeight: 1.1,
+                                        boxShadow: '0 8px 18px rgba(255, 92, 61, 0.28)',
+                                        transform: 'rotate(-12deg)',
+                                        whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    {promoBadgeText}
+                                </div>
+                            )}
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    flexWrap: 'wrap',
+                                    marginBottom: 6,
+                                }}
+                            >
+                                {product.is_vip === 1 && (
+                                    <Tag color="warning" style={{ margin: 0 }}>
+                                        {gLang('shop.executiveLimitShort')}
+                                    </Tag>
+                                )}
+                                {product.extra_config?.product_mode === 'lottery' && (
+                                    <Tag color="processing" style={{ margin: 0 }}>
+                                        {gLang('shop.lotteryTag')}
+                                    </Tag>
+                                )}
+                                {product.extra_config?.product_mode === 'spin_lottery' && (
+                                    <Tag color="purple" style={{ margin: 0 }}>
+                                        {gLang('shop.spinLotteryTag')}
+                                    </Tag>
+                                )}
+                                {product.pricing_preview?.mode === 'market' && (
+                                    <Tag color="volcano" style={{ margin: 0 }}>
+                                        {gLang('shop.surprisePriceTag')}
+                                    </Tag>
+                                )}
+                                {product.pricing_preview?.mode === 'discriminatory' && (
+                                    <Tag color="gold" style={{ margin: 0 }}>
+                                        {gLang('shop.exclusivePriceTag')}
+                                    </Tag>
+                                )}
+                            </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <h4
                                     style={{
                                         margin: 0,
-                                        fontSize: screens.xs ? 13 : 14,
+                                        fontSize: 15,
                                         lineHeight: '1.3',
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
+                                        whiteSpace: 'normal',
                                         fontWeight: 600,
                                         flex: 1,
                                         minWidth: 0,
@@ -244,7 +352,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
                                     color: descriptionColor,
                                     display: '-webkit-box',
                                     WebkitBoxOrient: 'vertical',
-                                    WebkitLineClamp: 1,
+                                    WebkitLineClamp: isTablet ? 3 : 1,
                                     overflow: 'hidden',
                                     lineHeight: '1.4',
                                 }}
@@ -265,43 +373,115 @@ const ProductCard: React.FC<ProductCardProps> = ({
                                     {itemIdText}
                                 </Text>
                             )}
+                            <div
+                                style={{
+                                    marginTop: 10,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'flex-start',
+                                    gap: 10,
+                                }}
+                            >
+                                <div>
+                                    <Text
+                                        style={{
+                                            display: 'block',
+                                            fontSize: 11,
+                                            color: metaColor,
+                                            lineHeight: 1.2,
+                                        }}
+                                    >
+                                        {gLang('shop.itemPrice')}
+                                    </Text>
+                                    <Text
+                                        style={{
+                                            color: priceColor,
+                                            fontWeight: 700,
+                                            fontSize: 22,
+                                            lineHeight: 1.1,
+                                        }}
+                                    >
+                                        {Number(product.price || 0)}
+                                    </Text>
+                                </div>
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        color: salesColor,
+                                        fontSize: 12,
+                                        whiteSpace: 'normal',
+                                        lineHeight: 1.4,
+                                    }}
+                                >
+                                    <FireOutlined style={{ fontSize: 12, color: salesIconColor }} />
+                                    <span>{gLang('shop.soldCountLabel', { count: product.sales })}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     {/* 悬浮销量信息（不占布局高度） */}
-                    <div
-                        style={{
-                            position: 'absolute',
-                            right: 8,
-                            bottom: 8,
-                            pointerEvents: 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            color: salesColor,
-                            fontSize: 12,
-                            userSelect: 'none',
-                        }}
-                    >
-                        <FireOutlined style={{ fontSize: 12, color: salesIconColor }} />
-                        <span>{gLang('shop.soldCountLabel', { count: product.sales })}</span>
-                    </div>
+                    {!isMobile && (
+                        <div
+                            style={{
+                                position: 'absolute',
+                                right: 8,
+                                bottom: 8,
+                                pointerEvents: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                color: salesColor,
+                                fontSize: 12,
+                                userSelect: 'none',
+                            }}
+                        >
+                            <FireOutlined style={{ fontSize: 12, color: salesIconColor }} />
+                            <span>{gLang('shop.soldCountLabel', { count: product.sales })}</span>
+                        </div>
+                    )}
                 </>
             ) : (
                 /* 桌面端布局 */
                 <>
-                    <SafeImage
-                        src={itemImage}
-                        alt={product.title}
-                        style={{
-                            width: 60,
-                            height: 60,
-                            objectFit: 'contain',
-                            borderRadius: 6,
-                            marginRight: 12,
-                            flexShrink: 0,
-                            background: imageBackground,
-                        }}
-                    />
+                    <div style={{ position: 'relative', marginRight: 12, flexShrink: 0 }}>
+                        <SafeImage
+                            src={itemImage}
+                            alt={product.title}
+                            style={{
+                                width: 96,
+                                height: 96,
+                                objectFit: 'contain',
+                                borderRadius: 16,
+                                flexShrink: 0,
+                                background: imageBackground,
+                                transform: isHover ? 'scale(1.06) translateY(-3px)' : 'scale(1)',
+                                transition: 'transform 0.28s ease',
+                            }}
+                        />
+                        {promoBadgeText && (
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    top: -10,
+                                    left: -12,
+                                    padding: '4px 10px',
+                                    borderRadius: 999,
+                                    background: promoBadgeColor,
+                                    color: '#fff',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    lineHeight: 1.1,
+                                    boxShadow: '0 10px 22px rgba(255, 92, 61, 0.28)',
+                                    transform: 'rotate(-12deg)',
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {promoBadgeText}
+                            </div>
+                        )}
+                    </div>
                     <div
                         style={{
                             flex: 1,
@@ -316,12 +496,15 @@ const ProductCard: React.FC<ProductCardProps> = ({
                             style={{
                                 margin: 0,
                                 fontSize: 15,
-                                whiteSpace: 'nowrap',
+                                whiteSpace: isTablet ? 'normal' : 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 lineHeight: '1.3',
                                 minWidth: 0,
                                 color: titleColor,
+                                display: isTablet ? '-webkit-box' : 'block',
+                                WebkitBoxOrient: isTablet ? 'vertical' : undefined,
+                                WebkitLineClamp: isTablet ? 2 : undefined,
                             }}
                         >
                             {product.title}

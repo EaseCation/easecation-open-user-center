@@ -23,6 +23,7 @@ import {
     BellOutlined,
     FilterOutlined,
     CloseOutlined,
+    ArrowRightOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { gLang } from '@common/language';
@@ -30,6 +31,7 @@ import Wrapper from '@common/components/Wrapper/Wrapper';
 import FeedbackListItem from './components/FeedbackListItem';
 import FeedbackDateGroupedList from './components/FeedbackDateGroupedList';
 import { FeedbackListItemDto } from '@ecuc/shared/types/ticket.types';
+import { TicketType } from '@ecuc/shared/types/ticket.types';
 import { fetchData } from '@common/axiosConfig';
 import usePageTitle from '@common/hooks/usePageTitle';
 import { useTheme } from '@common/contexts/ThemeContext';
@@ -37,6 +39,7 @@ import { useFeedbackFilters } from '@common/hooks/useFeedbackFilters';
 import { FeedbackListLayout } from '@common/components/FeedbackListLayout';
 import FeedbackSettingsModal from './components/FeedbackSettingsModal';
 import FeedbackTagSelect from '@common/components/Feedback/FeedbackTagSelect';
+import { useAuth } from '@common/contexts/AuthContext';
 
 type FeedbackTab = 'recentlySolved' | 'hotChat';
 
@@ -53,21 +56,27 @@ const Feedback: React.FC = () => {
     const screens = useBreakpoint();
     const isMobile = !screens.md;
     const { getThemeColor } = useTheme();
+    const { user } = useAuth();
 
     // Tab 状态 - 从 sessionStorage 恢复
     const [activeTab, setActiveTab] = useState<FeedbackTab>(() => {
         try {
             const stored = sessionStorage.getItem(`${STORAGE_KEY}_tab`);
+            if (stored === 'recentlySolved') return 'recentlySolved';
             if (stored === 'hotChat') return 'hotChat';
-        } catch { /* ignore */ }
-        return 'recentlySolved';
+        } catch {
+            /* ignore */
+        }
+        return 'hotChat';
     });
 
     // 持久化 tab 状态
     useEffect(() => {
         try {
             sessionStorage.setItem(`${STORAGE_KEY}_tab`, activeTab);
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
     }, [activeTab]);
 
     // 使用共享的筛选 Hook - 初始值根据 tab 设置
@@ -116,6 +125,52 @@ const Feedback: React.FC = () => {
     const [isCheckinModalOpen, setIsCheckinModalOpen] = useState(false);
     const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
     const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+
+    const switchToSearchMode = () => {
+        setActiveTab('hotChat');
+        setPublicTagIds(undefined);
+        setFilterType(undefined);
+        setFilterStatus(['open', 'closed']);
+        setSortBy('heat');
+        setOrder('desc');
+        setPage(1);
+        loadList(false, {
+            publicTagIds: undefined,
+            filterType: undefined,
+            filterStatus: ['open', 'closed'],
+            sortBy: 'heat',
+            order: 'desc',
+            page: 1,
+            keyword: searchValue.trim() || undefined,
+        });
+    };
+
+    const focusSearchInput = () => {
+        switchToSearchMode();
+        const input = document.querySelector(
+            '#feedback-search-input input'
+        ) as HTMLInputElement | null;
+        input?.focus();
+        input?.select();
+    };
+
+    const handleCreateSuggestion = () => {
+        if (!user) {
+            window.location.href =
+                '/login?return_to=' +
+                encodeURIComponent(
+                    `${window.location.origin}/ticket/new?type=${TicketType.Suggestion}&from=feedback`
+                );
+            return;
+        }
+
+        navigate(`/ticket/new?type=${TicketType.Suggestion}&from=feedback`, {
+            state: {
+                fromFeedbackCenter: true,
+                preselectedType: TicketType.Suggestion,
+            },
+        });
+    };
 
     // Check if this is the first visit after login
     const isFirstVisitAfterLogin = useMemo(() => {
@@ -266,6 +321,11 @@ const Feedback: React.FC = () => {
     }, [searchValue]);
 
     const loadExperienceData = () => {
+        if (!user?.openid) {
+            setExperience(0);
+            setCanCheckinToday(false);
+            return;
+        }
         fetchData({
             url: '/feedback/experience',
             method: 'GET',
@@ -284,7 +344,12 @@ const Feedback: React.FC = () => {
 
     useEffect(() => {
         loadExperienceData();
-    }, []);
+    }, [user?.openid]);
+
+    const handleLogin = () => {
+        const currentUrl = window.location.href;
+        window.location.href = '/login?return_to=' + encodeURIComponent(currentUrl);
+    };
 
     const openCheckinModal = () => {
         setIsCheckinModalOpen(true);
@@ -366,6 +431,122 @@ const Feedback: React.FC = () => {
                     </div>
 
                     {/* Tab 切换 */}
+                    <div style={animationStyle(0.25)}>
+                        <Card
+                            style={{
+                                borderRadius: 12,
+                                background: getThemeColor({
+                                    light: 'linear-gradient(135deg, #fff7e6 0%, #f6ffed 55%, #f0f5ff 100%)',
+                                    dark: 'linear-gradient(135deg, #2b1d0e 0%, #14221a 55%, #111827 100%)',
+                                }),
+                                border: `1px solid ${getThemeColor({ light: '#ffe7ba', dark: '#5b4630' })}`,
+                            }}
+                            bodyStyle={{ padding: isMobile ? '16px' : '18px 20px' }}
+                        >
+                            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                                <div>
+                                    <Tag color="gold" style={{ marginBottom: 10 }}>
+                                        {gLang('feedback.journeyBadge')}
+                                    </Tag>
+                                    <Title
+                                        level={4}
+                                        style={{ margin: 0, fontSize: isMobile ? 22 : 24 }}
+                                    >
+                                        {gLang('feedback.journeyTitle')}
+                                    </Title>
+                                    <Text
+                                        type="secondary"
+                                        style={{
+                                            display: 'block',
+                                            marginTop: 8,
+                                            lineHeight: 1.7,
+                                        }}
+                                    >
+                                        {gLang('feedback.journeyDesc')}
+                                    </Text>
+                                </div>
+
+                                <div
+                                    style={{
+                                        display: 'grid',
+                                        gap: 10,
+                                        gridTemplateColumns: isMobile
+                                            ? '1fr'
+                                            : 'repeat(3, minmax(0, 1fr))',
+                                    }}
+                                >
+                                    {[
+                                        [
+                                            gLang('feedback.journeyStepSearchTitle'),
+                                            gLang('feedback.journeyStepSearchDesc'),
+                                        ],
+                                        [
+                                            gLang('feedback.journeyStepJoinTitle'),
+                                            gLang('feedback.journeyStepJoinDesc'),
+                                        ],
+                                        [
+                                            gLang('feedback.journeyStepCreateTitle'),
+                                            gLang('feedback.journeyStepCreateDesc'),
+                                        ],
+                                    ].map(([title, desc], index) => (
+                                        <div
+                                            key={title}
+                                            style={{
+                                                padding: '12px 14px',
+                                                borderRadius: 10,
+                                                background: getThemeColor({
+                                                    light: '#ffffffcc',
+                                                    dark: '#111827cc',
+                                                }),
+                                                border: `1px solid ${getThemeColor({ light: '#f0f0f0', dark: '#303030' })}`,
+                                            }}
+                                        >
+                                            <Text strong>{`${index + 1}. ${title}`}</Text>
+                                            <Text
+                                                type="secondary"
+                                                style={{
+                                                    display: 'block',
+                                                    marginTop: 4,
+                                                    lineHeight: 1.6,
+                                                }}
+                                            >
+                                                {desc}
+                                            </Text>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <Space wrap>
+                                    <Button
+                                        type="primary"
+                                        icon={<SearchOutlined />}
+                                        onClick={focusSearchInput}
+                                    >
+                                        {gLang('feedback.journeySearchAction')}
+                                    </Button>
+                                    <Button
+                                        icon={<ArrowRightOutlined />}
+                                        onClick={handleCreateSuggestion}
+                                    >
+                                        {gLang(
+                                            user
+                                                ? 'feedback.journeyCreateAction'
+                                                : 'feedback.journeyCreateLoginAction'
+                                        )}
+                                    </Button>
+                                    <Button onClick={() => navigate('/ticket')}>
+                                        {gLang('feedback.journeyServiceAction')}
+                                    </Button>
+                                </Space>
+
+                                <Text type="secondary" style={{ lineHeight: 1.7 }}>
+                                    <Text strong>{gLang('feedback.journeyServiceSplitTitle')}</Text>{' '}
+                                    {gLang('feedback.journeyServiceSplitDesc')}
+                                </Text>
+                            </Space>
+                        </Card>
+                    </div>
+
                     <div style={animationStyle(0.5)}>
                         <Segmented
                             options={[
@@ -404,6 +585,7 @@ const Feedback: React.FC = () => {
                                     <>
                                         {/* 移动端：搜索栏 */}
                                         <Input
+                                            id="feedback-search-input"
                                             placeholder={gLang('feedback.searchPlaceholder')}
                                             prefix={<SearchOutlined />}
                                             value={searchValue}
@@ -415,28 +597,42 @@ const Feedback: React.FC = () => {
 
                                         {/* 移动端：快捷操作按钮 */}
                                         <Space.Compact style={{ width: '100%' }} block>
-                                            <Button
-                                                icon={<CheckCircleOutlined />}
-                                                onClick={openCheckinModal}
-                                                style={{ flex: 1 }}
-                                            >
-                                                {gLang('feedback.checkin')}
-                                            </Button>
-                                            <Button
-                                                icon={<SettingOutlined />}
-                                                onClick={() => setSettingsModalOpen(true)}
-                                                style={{ flex: 1 }}
-                                            >
-                                                {gLang('feedback.settings')}
-                                            </Button>
-                                            <Button
-                                                type="primary"
-                                                icon={<BellOutlined />}
-                                                onClick={() => navigate('/feedback/subscriptions')}
-                                                style={{ flex: 1 }}
-                                            >
-                                                {gLang('feedback.mySubscriptions')}
-                                            </Button>
+                                            {user ? (
+                                                <>
+                                                    <Button
+                                                        icon={<CheckCircleOutlined />}
+                                                        onClick={openCheckinModal}
+                                                        style={{ flex: 1 }}
+                                                    >
+                                                        {gLang('feedback.checkin')}
+                                                    </Button>
+                                                    <Button
+                                                        icon={<SettingOutlined />}
+                                                        onClick={() => setSettingsModalOpen(true)}
+                                                        style={{ flex: 1 }}
+                                                    >
+                                                        {gLang('feedback.settings')}
+                                                    </Button>
+                                                    <Button
+                                                        type="primary"
+                                                        icon={<BellOutlined />}
+                                                        onClick={() =>
+                                                            navigate('/feedback/subscriptions')
+                                                        }
+                                                        style={{ flex: 1 }}
+                                                    >
+                                                        {gLang('feedback.mySubscriptions')}
+                                                    </Button>
+                                                </>
+                                            ) : (
+                                                <Button
+                                                    type="primary"
+                                                    onClick={handleLogin}
+                                                    style={{ flex: 1 }}
+                                                >
+                                                    {gLang('feedback.loginToParticipate')}
+                                                </Button>
+                                            )}
                                         </Space.Compact>
                                     </>
                                 ) : (
@@ -451,6 +647,7 @@ const Feedback: React.FC = () => {
                                     >
                                         {/* 左侧：搜索框 */}
                                         <Input
+                                            id="feedback-search-input"
                                             placeholder={gLang('feedback.searchPlaceholder')}
                                             prefix={<SearchOutlined />}
                                             value={searchValue}
@@ -460,26 +657,34 @@ const Feedback: React.FC = () => {
                                         />
 
                                         {/* 中间：快捷按钮 */}
-                                        <Space>
-                                            <Button
-                                                onClick={openCheckinModal}
-                                                icon={<CheckCircleOutlined />}
-                                            >
-                                                {gLang('feedback.checkin')}
+                                        {user ? (
+                                            <Space>
+                                                <Button
+                                                    onClick={openCheckinModal}
+                                                    icon={<CheckCircleOutlined />}
+                                                >
+                                                    {gLang('feedback.checkin')}
+                                                </Button>
+                                                <Button
+                                                    icon={<SettingOutlined />}
+                                                    onClick={() => setSettingsModalOpen(true)}
+                                                >
+                                                    {gLang('feedback.settings')}
+                                                </Button>
+                                                <Button
+                                                    type="primary"
+                                                    onClick={() =>
+                                                        navigate('/feedback/subscriptions')
+                                                    }
+                                                >
+                                                    {gLang('feedback.mySubscriptions')}
+                                                </Button>
+                                            </Space>
+                                        ) : (
+                                            <Button type="primary" onClick={handleLogin}>
+                                                {gLang('feedback.loginToParticipate')}
                                             </Button>
-                                            <Button
-                                                icon={<SettingOutlined />}
-                                                onClick={() => setSettingsModalOpen(true)}
-                                            >
-                                                {gLang('feedback.settings')}
-                                            </Button>
-                                            <Button
-                                                type="primary"
-                                                onClick={() => navigate('/feedback/subscriptions')}
-                                            >
-                                                {gLang('feedback.mySubscriptions')}
-                                            </Button>
-                                        </Space>
+                                        )}
                                     </div>
                                 )}
 
@@ -588,7 +793,9 @@ const Feedback: React.FC = () => {
                                                         <Segmented
                                                             options={[
                                                                 {
-                                                                    label: gLang('feedback.allStatus'),
+                                                                    label: gLang(
+                                                                        'feedback.allStatus'
+                                                                    ),
                                                                     value: '',
                                                                 },
                                                                 {
@@ -611,7 +818,9 @@ const Feedback: React.FC = () => {
                                                             }
                                                             onChange={v =>
                                                                 setFilterStatus(
-                                                                    v === '' ? ['open', 'closed'] : String(v)
+                                                                    v === ''
+                                                                        ? ['open', 'closed']
+                                                                        : String(v)
                                                                 )
                                                             }
                                                             block
@@ -767,7 +976,10 @@ const Feedback: React.FC = () => {
                                                                 setSortBy('heat');
                                                                 loadList(false, {
                                                                     filterType: undefined,
-                                                                    filterStatus: ['open', 'closed'],
+                                                                    filterStatus: [
+                                                                        'open',
+                                                                        'closed',
+                                                                    ],
                                                                     publicTagIds: undefined,
                                                                     sortBy: 'heat',
                                                                     order: 'desc',
@@ -875,7 +1087,10 @@ const Feedback: React.FC = () => {
                                                 >
                                                     <Text
                                                         type="secondary"
-                                                        style={{ fontSize: 12, whiteSpace: 'nowrap' }}
+                                                        style={{
+                                                            fontSize: 12,
+                                                            whiteSpace: 'nowrap',
+                                                        }}
                                                     >
                                                         {gLang('feedback.filterStatus')}
                                                     </Text>
@@ -886,11 +1101,15 @@ const Feedback: React.FC = () => {
                                                                 value: '',
                                                             },
                                                             {
-                                                                label: gLang('feedback.status.open'),
+                                                                label: gLang(
+                                                                    'feedback.status.open'
+                                                                ),
                                                                 value: 'open',
                                                             },
                                                             {
-                                                                label: gLang('feedback.status.closed'),
+                                                                label: gLang(
+                                                                    'feedback.status.closed'
+                                                                ),
                                                                 value: 'closed',
                                                             },
                                                         ]}
@@ -901,7 +1120,9 @@ const Feedback: React.FC = () => {
                                                         }
                                                         onChange={v => {
                                                             const newStatus =
-                                                                v === '' ? ['open', 'closed'] : String(v);
+                                                                v === ''
+                                                                    ? ['open', 'closed']
+                                                                    : String(v);
                                                             setFilterStatus(newStatus);
                                                             setPage(1);
                                                             loadList(false, {
@@ -1077,8 +1298,7 @@ const Feedback: React.FC = () => {
                         <Skeleton active paragraph={{ rows: 5 }} />
                     ) : allTicketList && allTicketList.length > 0 ? (
                         <>
-                            {activeTab === 'recentlySolved' &&
-                            sortBy === 'completeTime' ? (
+                            {activeTab === 'recentlySolved' && sortBy === 'completeTime' ? (
                                 <FeedbackDateGroupedList
                                     items={allTicketList}
                                     renderItem={ticket => (
@@ -1156,57 +1376,66 @@ const Feedback: React.FC = () => {
                     )}
                 </Space>
             )}
-            <Modal
-                title={gLang('feedback.checkinModalTitle')}
-                open={isCheckinModalOpen}
-                onCancel={() => setIsCheckinModalOpen(false)}
-                footer={null}
-                width={isMobile ? '92vw' : 520}
-                centered
-                styles={{
-                    header: {
-                        borderRadius: '12px 12px 0 0',
-                        marginBottom: 10,
-                    },
-                    body: {
-                        padding: isMobile ? 14 : 20,
-                    },
-                    footer: {
-                        borderRadius: '0 0 12px 12px',
-                    },
-                }}
-            >
-                <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                    <div>
-                        <Text type="secondary">{gLang('feedback.seedBalanceLabel')}</Text>
-                        <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>
-                            {experience}
-                        </div>
-                    </div>
-                    <div>
-                        <Text strong>{gLang('feedback.seedRulesTitle')}</Text>
-                        <div style={{ marginTop: 8 }}>
-                            <Text type="secondary">{gLang('feedback.seedRuleCheckin')}</Text>
+            {user && (
+                <Modal
+                    title={gLang('feedback.checkinModalTitle')}
+                    open={isCheckinModalOpen}
+                    onCancel={() => setIsCheckinModalOpen(false)}
+                    footer={null}
+                    width={isMobile ? '92vw' : 520}
+                    centered
+                    styles={{
+                        header: {
+                            borderRadius: '12px 12px 0 0',
+                            marginBottom: 10,
+                        },
+                        body: {
+                            padding: isMobile ? 14 : 20,
+                        },
+                        footer: {
+                            borderRadius: '0 0 12px 12px',
+                        },
+                    }}
+                >
+                    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                        <div>
+                            <Text type="secondary">{gLang('feedback.seedBalanceLabel')}</Text>
+                            <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>
+                                {experience}
+                            </div>
                         </div>
                         <div>
-                            <Text type="secondary">{gLang('feedback.seedRuleReply')}</Text>
+                            <Text strong>{gLang('feedback.seedRulesTitle')}</Text>
+                            <div style={{ marginTop: 8 }}>
+                                <Text type="secondary">{gLang('feedback.seedRuleCheckin')}</Text>
+                            </div>
+                            <div>
+                                <Text type="secondary">{gLang('feedback.seedRuleReply')}</Text>
+                            </div>
                         </div>
-                    </div>
-                    {canCheckinToday ? (
-                        <Button type="primary" onClick={handleCheckin} loading={isCheckingIn} block>
-                            {gLang('feedback.checkin')}
-                        </Button>
-                    ) : (
-                        <Text type="secondary">{gLang('feedback.checkedInToday')}</Text>
-                    )}
-                </Space>
-            </Modal>
+                        {canCheckinToday ? (
+                            <Button
+                                type="primary"
+                                onClick={handleCheckin}
+                                loading={isCheckingIn}
+                                block
+                            >
+                                {gLang('feedback.checkin')}
+                            </Button>
+                        ) : (
+                            <Text type="secondary">{gLang('feedback.checkedInToday')}</Text>
+                        )}
+                    </Space>
+                </Modal>
+            )}
 
             {/* 设置 Modal */}
-            <FeedbackSettingsModal
-                open={settingsModalOpen}
-                onClose={() => setSettingsModalOpen(false)}
-            />
+            {user && (
+                <FeedbackSettingsModal
+                    open={settingsModalOpen}
+                    onClose={() => setSettingsModalOpen(false)}
+                />
+            )}
         </Wrapper>
     );
 };

@@ -16,20 +16,30 @@ type AdminStatLinkItemProps = {
 };
 
 const AdminStatLinkItem: React.FC<AdminStatLinkItemProps> = props => {
-    const { to, count = 0, isPC, icon, title, onClick, loading, showValue = true } = props;
+    const { to, count = 0, isPC, icon, title, onClick, loading, showValue = true, buttonText } = props;
 
     const pending = count > 0;
     const valueStyle = count === 0 ? { color: 'var(--ant-color-text-secondary)' } : undefined;
 
     const renderContent = () =>
         showValue ? (
-            <Statistic
-                loading={!!loading}
-                title={title}
-                value={count}
-                prefix={icon}
-                valueStyle={valueStyle}
-            />
+            <div>
+                <Statistic
+                    loading={!!loading}
+                    title={title}
+                    value={count}
+                    prefix={icon}
+                    valueStyle={valueStyle}
+                />
+                {buttonText && (
+                    <Typography.Text
+                        type="secondary"
+                        style={{ fontSize: 12, marginTop: 4, display: 'inline-block' }}
+                    >
+                        {buttonText}
+                    </Typography.Text>
+                )}
+            </div>
         ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span>{icon}</span>

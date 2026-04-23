@@ -1,0 +1,754 @@
+.pageFullBackground {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-image:
+        var(--media-console-page-bg, none),
+        linear-gradient(132deg, #070d2f 0%, #0d1552 48%, #1f0f4a 74%, #2d114f 100%);
+    background-size: cover, cover;
+    background-position: center center, center center;
+    background-repeat: no-repeat;
+}
+
+.consoleRoot {
+    width: 100%;
+    min-height: calc(100vh - 120px);
+    border-radius: 0;
+    padding: 28px 36px;
+    background-image:
+        var(--media-console-bg, none),
+        radial-gradient(circle at 18% 14%, rgba(123, 96, 255, 0.35) 0%, rgba(123, 96, 255, 0) 42%),
+        radial-gradient(circle at 84% 18%, rgba(242, 73, 255, 0.28) 0%, rgba(242, 73, 255, 0) 36%),
+        linear-gradient(132deg, #070d2f 0%, #0d1552 48%, #1f0f4a 74%, #2d114f 100%);
+    background-size:
+        cover,
+        auto,
+        auto,
+        auto;
+    background-position:
+        center center,
+        center center,
+        center center,
+        center center;
+    background-repeat: no-repeat;
+    position: relative;
+    overflow: hidden;
+}
+
+.themeLight {
+    --title-color: #f7fbff;
+    --subtitle-color: #cff0ff;
+    --hint-text: rgba(229, 247, 255, 0.9);
+    --hint-bg: rgba(9, 15, 44, 0.58);
+}
+
+.themeDark {
+    --title-color: #ffffff;
+    --subtitle-color: #e0f4ff;
+    --hint-text: rgba(236, 248, 255, 0.96);
+    --hint-bg: rgba(6, 10, 36, 0.68);
+}
+
+.consoleRoot::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        radial-gradient(1px 1px at 11% 20%, rgba(190, 237, 255, 0.9) 0%, transparent 80%),
+        radial-gradient(1px 1px at 34% 36%, rgba(190, 237, 255, 0.65) 0%, transparent 80%),
+        radial-gradient(1px 1px at 68% 24%, rgba(255, 192, 245, 0.85) 0%, transparent 80%),
+        radial-gradient(1px 1px at 89% 44%, rgba(180, 227, 255, 0.75) 0%, transparent 80%),
+        radial-gradient(1px 1px at 74% 72%, rgba(255, 192, 245, 0.65) 0%, transparent 80%),
+        radial-gradient(1px 1px at 24% 82%, rgba(165, 222, 255, 0.8) 0%, transparent 80%);
+    pointer-events: none;
+    animation: particleDrift 10s linear infinite;
+}
+
+.consoleRoot::after {
+    content: '';
+    position: absolute;
+    inset: 16px;
+    border: 1px solid rgba(192, 226, 255, 0.22);
+    border-radius: 20px;
+    pointer-events: none;
+}
+
+.consoleHeader {
+    position: relative;
+    z-index: 2;
+    margin-bottom: 16px;
+}
+
+.consoleTitleCn {
+    color: var(--title-color);
+    font-size: 44px;
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: 0.03em;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+
+.consoleTitleEn {
+    color: var(--subtitle-color);
+    margin-top: 4px;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    font-family: 'Orbitron', 'Rajdhani', 'Segoe UI', sans-serif;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+.holoStage {
+    min-height: calc(100vh - 220px);
+    position: relative;
+    z-index: 1;
+}
+
+.holoLinkLayer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.holoLinkLayer line {
+    stroke: rgba(172, 223, 255, 0.75);
+    stroke-width: 2;
+    filter: drop-shadow(0 0 8px rgba(132, 197, 255, 0.65));
+    stroke-dasharray: 360;
+    stroke-dashoffset: 360;
+    animation: lineAssemble 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation-delay: var(--line-delay, 0ms);
+}
+
+.ePointCrystal {
+    position: absolute;
+    top: 30%;
+    left: 6%;
+    width: 200px;
+    height: 230px;
+    clip-path: polygon(50% 0, 100% 28%, 100% 72%, 50% 100%, 0 72%, 0 28%);
+    border: 1px solid rgba(192, 227, 255, 0.5);
+    background:
+        linear-gradient(156deg, rgba(255, 255, 255, 0.34) 0%, rgba(123, 112, 255, 0.2) 46%, rgba(14, 24, 66, 0.26) 100%),
+        radial-gradient(circle at 36% 22%, rgba(212, 249, 255, 0.85), rgba(212, 249, 255, 0) 56%);
+    box-shadow:
+        inset 0 0 24px rgba(207, 247, 255, 0.25),
+        0 0 24px rgba(145, 187, 255, 0.34);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.crystalValue {
+    color: #eaf9ff;
+    font-size: 48px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-shadow: 0 0 14px rgba(139, 238, 255, 0.65);
+}
+
+.crystalLabel {
+    margin-top: 10px;
+    color: rgba(221, 243, 255, 0.88);
+    font-size: 22px;
+    font-weight: 600;
+}
+
+.mascotZone {
+    position: absolute;
+    top: 27%;
+    left: 42%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+.mascotButton {
+    border: none;
+    width: 196px;
+    height: 196px;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.25s ease;
+}
+
+.mascotButton:hover {
+    transform: scale(1.03);
+}
+
+.ringOuter,
+.ringInner {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(150, 223, 255, 0.7);
+    pointer-events: none;
+}
+
+.ringOuter {
+    width: 194px;
+    height: 66px;
+    transform: rotate(-7deg);
+    box-shadow: 0 0 18px rgba(115, 183, 255, 0.52);
+    animation: ringSpin 8.6s linear infinite;
+}
+
+.ringInner {
+    width: 154px;
+    height: 54px;
+    transform: rotate(12deg);
+    border-color: rgba(240, 131, 255, 0.64);
+    box-shadow: 0 0 12px rgba(240, 131, 255, 0.35);
+    animation: ringSpinRev 6.4s linear infinite;
+}
+
+.mascotButton:hover .ringOuter {
+    animation-duration: 3.8s;
+}
+
+.mascotButton:hover .ringInner {
+    animation-duration: 2.9s;
+}
+
+.mascotImage {
+    width: 158px;
+    height: 158px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 14px rgba(184, 220, 255, 0.62));
+}
+
+.holoHint {
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: var(--hint-bg);
+    border: 1px solid rgba(188, 230, 255, 0.2);
+    color: var(--hint-text);
+    font-size: 14px;
+    max-width: 230px;
+    text-align: center;
+}
+
+.infoEntryButton {
+    border-radius: 999px;
+    border: 1px solid rgba(197, 232, 255, 0.36) !important;
+    background: linear-gradient(135deg, rgba(105, 72, 255, 0.92) 0%, rgba(174, 79, 255, 0.92) 100%) !important;
+    box-shadow: 0 10px 20px rgba(89, 60, 206, 0.4);
+}
+
+.nodeHidden {
+    opacity: 0;
+    transform: translateY(12px) scale(0.92);
+    pointer-events: none;
+}
+
+.nodeVisible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+    transition:
+        opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--node-delay, 0ms);
+}
+
+.nodeSlot {
+    position: absolute;
+}
+
+.nodeTop {
+    top: 12%;
+    left: 53%;
+}
+
+.nodeRight {
+    top: 22%;
+    right: 15%;
+}
+
+.nodeBottomRight {
+    top: 49%;
+    right: 15%;
+}
+
+.nodeBottomLeft {
+    top: 57%;
+    left: 32%;
+}
+
+.nodeGroup {
+    top: 65%;
+    right: 6%;
+}
+
+.holoNode {
+    border: 1px solid rgba(197, 232, 255, 0.42);
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    background: rgba(11, 17, 43, 0.66);
+    box-shadow:
+        inset 0 0 18px rgba(170, 238, 255, 0.2),
+        0 0 18px rgba(118, 194, 255, 0.28);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    animation: nodeFloat 5.8s ease-in-out infinite;
+    animation-delay: var(--float-delay, 0ms);
+    transition:
+        transform 0.22s ease,
+        box-shadow 0.22s ease;
+}
+
+.holoNode:hover {
+    box-shadow:
+        inset 0 0 18px rgba(194, 239, 255, 0.3),
+        0 0 20px rgba(178, 109, 255, 0.38),
+        0 0 30px rgba(133, 196, 255, 0.24);
+}
+
+.holoNodeIcon {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    background: linear-gradient(145deg, rgba(124, 85, 255, 0.45) 0%, rgba(75, 171, 255, 0.34) 100%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.holoNodeTitle {
+    color: #e5f7ff;
+    font-size: 18px;
+    line-height: 1.2;
+    font-weight: 600;
+    text-shadow: 0 0 8px rgba(119, 207, 255, 0.25);
+}
+
+.modalHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.modalMascot {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 7px rgba(144, 207, 255, 0.6));
+}
+
+.modalTitle {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.holoModalDesktop :global(.ant-modal-content) {
+    border-radius: 20px;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 92% 8%, rgba(239, 130, 255, 0.18), rgba(239, 130, 255, 0) 30%),
+        linear-gradient(152deg, rgba(7, 10, 31, 0.95) 0%, rgba(11, 16, 40, 0.96) 60%, rgba(19, 14, 47, 0.96) 100%);
+    border: 1px solid rgba(198, 229, 255, 0.2);
+    box-shadow: 0 24px 56px rgba(3, 8, 32, 0.62);
+    animation: assembleIn 0.42s ease-out;
+}
+
+.holoModalMobile :global(.ant-modal-content) {
+    min-height: 100vh;
+    border-radius: 0;
+    background:
+        radial-gradient(circle at 90% 8%, rgba(239, 130, 255, 0.16), rgba(239, 130, 255, 0) 34%),
+        linear-gradient(158deg, rgba(7, 10, 31, 0.98) 0%, rgba(11, 16, 40, 0.98) 58%, rgba(20, 14, 48, 0.98) 100%);
+    border: 1px solid rgba(198, 229, 255, 0.18);
+    animation: assembleIn 0.42s ease-out;
+}
+
+.holoModalDesktop :global(.ant-modal-close),
+.holoModalMobile :global(.ant-modal-close) {
+    color: #d092ff;
+}
+
+.holoModalDesktop :global(.ant-modal-close:hover),
+.holoModalMobile :global(.ant-modal-close:hover) {
+    color: #f2c6ff;
+}
+
+.holoModalDesktop :global(.ant-modal-close-x),
+.holoModalMobile :global(.ant-modal-close-x) {
+    font-size: 18px;
+}
+
+.infoRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    border: 1px solid rgba(185, 227, 255, 0.16);
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+
+.infoKey {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #ffffff;
+    font-size: 14px;
+}
+
+.infoKey :global(.anticon) {
+    color: #d2a1ff;
+}
+
+.infoValue {
+    color: #cad3e6;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: right;
+}
+
+.statusValue {
+    color: #6ff5a2;
+}
+
+.infoLink {
+    color: #d193ff !important;
+    padding-inline: 0 !important;
+}
+
+.infoLink:hover {
+    color: #f0c4ff !important;
+}
+
+.infoLinkPlain {
+    color: #d193ff;
+    text-decoration: none;
+}
+
+.infoLinkPlain:hover {
+    color: #f0c4ff;
+}
+
+.infoModalLight .infoRow {
+    border: 1px solid #e5e7eb;
+    background: rgba(255, 255, 255, 0.92);
+}
+
+.infoModalLight .infoKey {
+    color: #111827;
+}
+
+.infoModalLight .infoKey :global(.anticon) {
+    color: #7c3aed;
+}
+
+.infoModalLight .infoValue {
+    color: #374151;
+}
+
+.infoModalLight .statusValue {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.infoModalLight .infoLink {
+    color: #7c3aed !important;
+}
+
+.infoModalLight .infoLink:hover {
+    color: #6d28d9 !important;
+}
+
+.infoModalLight .infoLinkPlain {
+    color: #7c3aed;
+}
+
+.infoModalLight .infoLinkPlain:hover {
+    color: #6d28d9;
+}
+
+@keyframes ringSpin {
+    from {
+        transform: rotate(-7deg);
+    }
+    to {
+        transform: rotate(353deg);
+    }
+}
+
+@keyframes ringSpinRev {
+    from {
+        transform: rotate(12deg);
+    }
+    to {
+        transform: rotate(-348deg);
+    }
+}
+
+@keyframes particleDrift {
+    0% {
+        transform: translateY(0);
+        opacity: 0.95;
+    }
+    50% {
+        transform: translateY(-8px);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(0);
+        opacity: 0.95;
+    }
+}
+
+@keyframes lineAssemble {
+    from {
+        stroke-dashoffset: 360;
+        opacity: 0;
+    }
+    to {
+        stroke-dashoffset: 0;
+        opacity: 1;
+    }
+}
+
+@keyframes nodeFloat {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0);
+    }
+    50% {
+        transform: translate3d(0, -7px, 0);
+    }
+}
+
+@keyframes assembleIn {
+    from {
+        transform: translateY(12px) scale(0.92);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+@media (max-width: 1199px) {
+    .consoleTitleCn {
+        font-size: 38px;
+    }
+
+    .consoleTitleEn {
+        font-size: 24px;
+    }
+
+    .consoleRoot {
+        padding: 24px 20px;
+    }
+
+    .holoStage {
+        min-height: calc(100vh - 220px);
+    }
+
+    .ePointCrystal {
+        left: 5%;
+        top: 34%;
+    }
+
+    .nodeRight,
+    .nodeBottomRight {
+        right: 9%;
+    }
+
+    .nodeTop {
+        left: 52%;
+    }
+
+    .nodeBottomLeft {
+        left: 29%;
+    }
+
+    .nodeGroup {
+        right: 7%;
+        top: 68%;
+    }
+
+    .mascotZone {
+        left: 41%;
+        top: 33%;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+    .consoleRoot {
+        padding: 20px 18px;
+    }
+
+    .consoleTitleCn {
+        font-size: 36px;
+    }
+
+    .consoleTitleEn {
+        font-size: 22px;
+    }
+
+    .holoStage {
+        min-height: 760px;
+    }
+
+    .ePointCrystal {
+        width: 182px;
+        height: 210px;
+        left: 4%;
+        top: 33%;
+    }
+
+    .mascotZone {
+        left: 39%;
+        top: 34%;
+    }
+
+    .nodeTop {
+        top: 14%;
+        left: 50%;
+    }
+
+    .nodeRight {
+        top: 24%;
+        right: 6%;
+    }
+
+    .nodeBottomRight {
+        top: 50%;
+        right: 6%;
+    }
+
+    .nodeBottomLeft {
+        top: 61%;
+        left: 26%;
+    }
+
+    .nodeGroup {
+        top: 72%;
+        right: 7%;
+    }
+}
+
+@media (max-width: 767px) {
+    .consoleRoot {
+        min-height: calc(100vh - 92px);
+        padding: 12px;
+        border-radius: 0;
+    }
+
+    .consoleHeader {
+        margin-bottom: 10px;
+    }
+
+    .consoleTitleCn {
+        font-size: 32px;
+    }
+
+    .consoleTitleEn {
+        font-size: 17px;
+    }
+
+    .holoStage {
+        min-height: auto;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding-bottom: 8px;
+    }
+
+    .holoLinkLayer {
+        display: none;
+    }
+
+    .ePointCrystal,
+    .mascotZone,
+    .nodeSlot {
+        position: static;
+    }
+
+    .ePointCrystal {
+        width: 100%;
+        height: 164px;
+        clip-path: polygon(50% 0, 96% 20%, 96% 80%, 50% 100%, 4% 80%, 4% 20%);
+    }
+
+    .crystalValue {
+        font-size: 42px;
+    }
+
+    .crystalLabel {
+        font-size: 19px;
+    }
+
+    .mascotZone {
+        gap: 8px;
+    }
+
+    .mascotButton {
+        width: 164px;
+        height: 164px;
+    }
+
+    .ringOuter {
+        width: 164px;
+    }
+
+    .ringInner {
+        width: 132px;
+    }
+
+    .mascotImage {
+        width: 138px;
+        height: 138px;
+    }
+
+    .holoHint {
+        max-width: none;
+        width: 100%;
+    }
+
+    .nodeSlot {
+        width: 100%;
+    }
+
+    .holoNode {
+        width: 100%;
+        height: auto;
+        border-radius: 14px;
+        flex-direction: row;
+        justify-content: flex-start;
+        padding: 14px 16px;
+        gap: 12px;
+    }
+
+    .holoNodeTitle {
+        font-size: 16px;
+    }
+
+    .nodeGroup {
+        width: 100%;
+    }
+
+    .infoEntryButton {
+        width: 100%;
+    }
+}

@@ -17,6 +17,7 @@ import usePageTitle from '@common/hooks/usePageTitle';
 import { useTheme } from '@common/contexts/ThemeContext';
 import { CUSTOM_THEME_PALETTES } from '@common/themes/customPalettes';
 import AccountRecoveryModal from './components/AccountRecoveryModal';
+import RegistrationCodeModal from './components/RegistrationCodeModal';
 
 // 淡入动画
 const fadeInUpAnimation = `
@@ -119,6 +120,7 @@ const Account = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isFormDisabled, setIsFormDisabled] = useState(false);
     const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+    const [showRegistrationCodeModal, setShowRegistrationCodeModal] = useState(false);
 
     const [ecList, setEcList] = useState<PlayerBindListData[]>([]);
     const [loading, setLoading] = useState(true);
@@ -227,7 +229,7 @@ const Account = () => {
                             icon={<QuestionCircleOutlined />}
                             onClick={() => setShowRecoveryModal(true)}
                             style={{
-                                marginBottom: '24px',
+                                marginBottom: '16px',
                                 height: '48px',
                                 borderRadius: '8px',
                                 fontWeight: 500,
@@ -239,6 +241,34 @@ const Account = () => {
                             className="hover-scale"
                         >
                             {gLang('ecDetail.accountRecovery.title')}
+                        </Button>
+                    </div>
+
+                    <div
+                        style={{
+                            opacity: 0,
+                            animation: `fadeInUp 0.5s ease-in-out ${cardIndex++ * animationDelay}s forwards`,
+                        }}
+                    >
+                        <Button
+                            size="large"
+                            type="default"
+                            block
+                            icon={<PlusOutlined />}
+                            onClick={() => setShowRegistrationCodeModal(true)}
+                            style={{
+                                marginBottom: '24px',
+                                height: '48px',
+                                borderRadius: '8px',
+                                fontWeight: 500,
+                                transition: 'all 0.3s ease',
+                                background: isBlackOrangeActive ? palette.surfaceAlt : undefined,
+                                borderColor: isBlackOrangeActive ? palette.border : undefined,
+                                color: isBlackOrangeActive ? palette.textPrimary : undefined,
+                            }}
+                            className="hover-scale"
+                        >
+                            {gLang('ecDetail.registrationCode.btnLabel')}
                         </Button>
                     </div>
 
@@ -382,6 +412,12 @@ const Account = () => {
             <AccountRecoveryModal
                 open={showRecoveryModal}
                 onCancel={() => setShowRecoveryModal(false)}
+            />
+
+            {/* 注册验证码模态框 */}
+            <RegistrationCodeModal
+                open={showRegistrationCodeModal}
+                onCancel={() => setShowRegistrationCodeModal(false)}
             />
         </Wrapper>
     );

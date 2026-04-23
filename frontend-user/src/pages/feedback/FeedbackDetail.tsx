@@ -1,9 +1,9 @@
 // 反馈详情页面 - 社区讨论风格
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Card, Space, Typography, message, Grid, Skeleton } from 'antd';
-import { fetchData, submitData } from '@common/axiosConfig';
-import { useParams } from 'react-router-dom';
+import { Button, Card, Result, Space, Typography, message, Grid, Skeleton } from 'antd';
+import axiosInstance, { submitData } from '@common/axiosConfig';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { gLang } from '@common/language';
 import Wrapper from '@common/components/Wrapper/Wrapper';
 import { Feedback, TicketStatus, TicketDetail } from '@ecuc/shared/types/ticket.types';
@@ -13,6 +13,7 @@ import FeedbackContent from '@common/components/Feedback/FeedbackContent';
 import { FeedbackAnchorRoute } from '@common/components/Feedback';
 import { useFeedbackEligibility } from '../../contexts/FeedbackEligibilityContext';
 import FeedbackSettingsModal from './components/FeedbackSettingsModal';
+import SourceTicketActionCard from './components/SourceTicketActionCard';
 import { useAuth } from '@common/contexts/AuthContext';
 
 // 淡入动画
@@ -43,41 +44,66 @@ const { Text } = Typography;
 const FeedbackDetail: React.FC = () => {
     usePageTitle();
     const { tid } = useParams();
+    const navigate = useNavigate();
     const screens = useBreakpoint();
     const isMobile = !screens.md;
     const [ticket, setTicket] = useState<Feedback | undefined>();
     const [isSpinning, setIsSpinning] = useState(true);
+    const [detailError, setDetailError] = useState<'notFound' | 'loadFailed' | null>(null);
     const [isFormDisabled, setIsFormDisabled] = useState(false);
     const [filterType, setFilterType] = useState<'all' | 'official'>('all');
     const [subscribed, setSubscribed] = useState<Record<string, boolean> | undefined>(undefined);
     const [isUpdatingSubscription, setIsUpdatingSubscription] = useState(false);
     const [replyingToDetailId, setReplyingToDetailId] = useState<number | null>(null);
     const { getThemeColor } = useTheme();
-    // 发言资格检查（进入页面时异步完成）
-    useFeedbackEligibility();
+    const { eligibility, loading: eligibilityLoading } = useFeedbackEligibility();
     const [settingsModalOpen, setSettingsModalOpen] = useState(false);
     const [messageApi, contextHolder] = message.useMessage();
     const { user } = useAuth();
+    const [searchParams] = useSearchParams();
+
+    // 推荐并入：从 URL 参数读取推荐上下文
+    const recommendationId = searchParams.get('recommendationId');
+    const sourceTid = searchParams.get('sourceTid');
+    const hasRecommendationContext = Boolean(recommendationId && sourceTid);
 
     // Animation delay
     const animationDelay = 0.02;
     const cardIndex = useRef(0);
 
-    useEffect(() => {
+    const loadDetail = async () => {
         setIsSpinning(true);
-        fetchData({
-            url: '/feedback/detail',
-            method: 'GET',
-            data: { tid: tid },
-            setData: data => {
-                setTicket(data);
-                setSubscribed((data as any).subscribed ?? {});
-                setIsSpinning(false);
-            },
-            setSpin: setIsSpinning,
-        }).catch(() => {
+        setDetailError(null);
+        try {
+            const response = await axiosInstance.get('/feedback/detail', {
+                params: { tid },
+            });
+            const responseData = response.data;
+
+            if (responseData?.EPF_code === 200) {
+                setTicket(responseData);
+                setSubscribed((responseData as any).subscribed ?? {});
+                return;
+            }
+
+            setTicket(undefined);
+            setSubscribed(undefined);
+            if (responseData?.EPF_code === 8005) {
+                setDetailError('notFound');
+            } else {
+                setDetailError('loadFailed');
+            }
+        } catch {
+            setTicket(undefined);
+            setSubscribed(undefined);
+            setDetailError('loadFailed');
+        } finally {
             setIsSpinning(false);
-        });
+        }
+    };
+
+    useEffect(() => {
+        loadDetail();
     }, [tid]);
 
     const { mainPost, replies, detailIdToFloor } = useMemo((): {
@@ -183,34 +209,22 @@ const FeedbackDetail: React.FC = () => {
             });
             // 回复成功后重置并刷新
             setReplyingToDetailId(null);
-            setIsSpinning(true);
-            fetchData({
-                url: '/feedback/detail',
-                method: 'GET',
-                data: { tid: tid },
-                setData: data => {
-                    setTicket(data);
-                    setSubscribed((data as any).subscribed ?? {});
-                },
-                setSpin: setIsSpinning,
-                callback: () => {
-                    // 数据刷新后，滚动到新发布的评论位置
-                    setTimeout(() => {
-                        const newCommentId = response?.detail_id;
-                        if (newCommentId) {
-                            const commentElement = document.getElementById(
-                                `feedback-floor-${newCommentId}`
-                            );
-                            if (commentElement) {
-                                commentElement.scrollIntoView({
-                                    behavior: 'smooth',
-                                    block: 'center',
-                                });
-                            }
-                        }
-                    }, 100);
-                },
-            });
+            await loadDetail();
+            // 数据刷新后，滚动到新发布的评论位置
+            setTimeout(() => {
+                const newCommentId = response?.detail_id;
+                if (newCommentId) {
+                    const commentElement = document.getElementById(
+                        `feedback-floor-${newCommentId}`
+                    );
+                    if (commentElement) {
+                        commentElement.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'center',
+                        });
+                    }
+                }
+            }, 100);
         } catch (error: any) {
             // EPF 2026：发言资格验证失败（未设置/已解绑/被处罚），自动弹出设置 Modal 让玩家换绑或重新选择
             if (error?.response?.data?.EPF_code === 2026) {
@@ -260,6 +274,45 @@ const FeedbackDetail: React.FC = () => {
         );
     }
 
+    if (detailError === 'notFound') {
+        return (
+            <Wrapper>
+                <Result
+                    status="404"
+                    title="404"
+                    subTitle={gLang('feedback.detailNotFound')}
+                    extra={
+                        <Button type="primary" onClick={() => navigate('/feedback')}>
+                            {gLang('feedback.backToFeedbackList')}
+                        </Button>
+                    }
+                />
+            </Wrapper>
+        );
+    }
+
+    if (detailError === 'loadFailed') {
+        return (
+            <Wrapper>
+                <Result
+                    status="warning"
+                    title={gLang('feedback.detailLoadFailedTitle')}
+                    subTitle={gLang('feedback.detailLoadFailed')}
+                    extra={
+                        <Space>
+                            <Button onClick={() => navigate('/feedback')}>
+                                {gLang('feedback.backToFeedbackList')}
+                            </Button>
+                            <Button type="primary" onClick={() => loadDetail()}>
+                                {gLang('feedback.retryLoadDetail')}
+                            </Button>
+                        </Space>
+                    }
+                />
+            </Wrapper>
+        );
+    }
+
     if (!ticket && !isSpinning) {
         return (
             <Wrapper>
@@ -284,7 +337,58 @@ const FeedbackDetail: React.FC = () => {
         return null;
     }
 
-    const canReply = ticket.status !== TicketStatus.Accept && ticket.status !== TicketStatus.Reject;
+    const isLoggedIn = Boolean(user?.openid);
+    const isTicketClosed =
+        ticket.status === TicketStatus.Accept || ticket.status === TicketStatus.Reject;
+    const canReply = isLoggedIn && !isTicketClosed && eligibility?.canSpeak === true;
+    const loginToCurrentPage = () => {
+        const currentUrl = window.location.href;
+        window.location.href = '/login?return_to=' + encodeURIComponent(currentUrl);
+    };
+    const replyGuard = (() => {
+        if (isTicketClosed) {
+            return {
+                mode: 'closed' as const,
+            };
+        }
+        if (!isLoggedIn) {
+            return {
+                mode: 'login' as const,
+                message: gLang('feedback.loginToReply'),
+                actionLabel: gLang('feedback.loginNow'),
+                onAction: loginToCurrentPage,
+            };
+        }
+        if (eligibilityLoading) {
+            return {
+                mode: 'loading' as const,
+                message: gLang('feedback.replyGuardLoading'),
+            };
+        }
+        if (!eligibility) {
+            return {
+                mode: 'punished' as const,
+                message: gLang('feedback.replyGuardUnavailable'),
+            };
+        }
+        if (eligibility.canSpeak) {
+            return {
+                mode: 'active' as const,
+            };
+        }
+        if (eligibility.reason === 'PUNISHED') {
+            return {
+                mode: 'punished' as const,
+                message: eligibility.message,
+            };
+        }
+        return {
+            mode: 'settings' as const,
+            message: eligibility.message,
+            actionLabel: gLang('feedback.settings'),
+            onAction: () => setSettingsModalOpen(true),
+        };
+    })();
 
     return (
         <Wrapper>
@@ -300,6 +404,17 @@ const FeedbackDetail: React.FC = () => {
                 {/* 主内容区 */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                        {/* 推荐并入：来源工单操作卡 */}
+                        {hasRecommendationContext && isLoggedIn && (
+                            <SourceTicketActionCard
+                                recommendationId={Number(recommendationId)}
+                                sourceTid={Number(sourceTid)}
+                                feedbackTid={Number(tid)}
+                                feedbackTitle={ticket?.title}
+                                onActionComplete={loadDetail}
+                            />
+                        )}
+
                         <FeedbackContent
                             ticket={ticket as any}
                             isSpinning={isSpinning}
@@ -317,6 +432,7 @@ const FeedbackDetail: React.FC = () => {
                             primaryOpenid={user?.openid}
                             isUpdatingSubscription={isUpdatingSubscription}
                             onSubscriptionChange={handleSubscriptionChange}
+                            replyGuard={replyGuard}
                         />
                     </Space>
                 </div>

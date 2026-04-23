@@ -7,6 +7,12 @@ export interface QuickInsertExtraField {
     required?: boolean;
     autoType?: string;
     lock?: boolean;
+    inputType?: 'input' | 'textarea' | 'select' | 'number';
+    options?: Array<{
+        labelKey: string;
+        value: string;
+    }>;
+    min?: number;
 }
 
 export interface QuickInsertItem {
@@ -105,6 +111,70 @@ export const quickInsertConfig: Partial<Record<TicketType, Record<string, QuickI
         OTHER: {
             titleKey: 'ticketList.quickInsertListTitle.OTHER',
             contentKey: 'ticketList.quickInsertList.OTHER',
+        },
+        CLOUD_MATERIAL: {
+            titleKey: 'ticketList.quickInsertListTitle.CLOUD_MATERIAL',
+            contentKey: 'ticketList.quickInsertList.CLOUD_MATERIAL',
+            extraFields: [
+                {
+                    name: 'howToCallYou',
+                    labelKey: 'ticketList.howToCallYou',
+                    placeholderKey: 'ticketList.howToCallYouPlaceholder',
+                    required: true,
+                },
+                {
+                    name: 'cloudMaterialListed',
+                    labelKey: 'ticketList.cloudMaterialListed',
+                    placeholderKey: 'ticketList.cloudMaterialListedPlaceholder',
+                    required: true,
+                },
+                {
+                    name: 'cloudMaterialTitle',
+                    labelKey: 'ticketList.cloudMaterialTitle',
+                    placeholderKey: 'ticketList.cloudMaterialTitlePlaceholder',
+                    required: true,
+                },
+                {
+                    name: 'cloudMaterialDescription',
+                    labelKey: 'ticketList.cloudMaterialDescription',
+                    placeholderKey: 'ticketList.cloudMaterialDescriptionPlaceholder',
+                    inputType: 'textarea',
+                    required: true,
+                },
+                {
+                    name: 'cloudMaterialPurchaseMethod',
+                    labelKey: 'ticketList.cloudMaterialPurchaseMethod',
+                    inputType: 'select',
+                    required: true,
+                    options: [
+                        {
+                            labelKey: 'ticketList.cloudMaterialPurchaseMethodOptions.free',
+                            value: 'free',
+                        },
+                        {
+                            labelKey: 'ticketList.cloudMaterialPurchaseMethodOptions.ecCoin',
+                            value: 'ec_coin',
+                        },
+                        {
+                            labelKey: 'ticketList.cloudMaterialPurchaseMethodOptions.voucher',
+                            value: 'voucher',
+                        },
+                    ],
+                },
+                {
+                    name: 'cloudMaterialPrice',
+                    labelKey: 'ticketList.cloudMaterialPrice',
+                    placeholderKey: 'ticketList.cloudMaterialPricePlaceholder',
+                    inputType: 'number',
+                },
+                {
+                    name: 'contactInfo',
+                    labelKey: 'ticketList.contactInfo',
+                    placeholderKey: 'ticketList.contactInfoPlaceholder',
+                    required: true,
+                },
+            ],
+            noteKey: 'ticketList.cloudMaterialAttachmentNote',
         },
         // "8DAY8MAP": {
         //     titleKey: "ticketList.quickInsertListTitle.8DAY8MAP",

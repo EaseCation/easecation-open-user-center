@@ -2,13 +2,11 @@
 // 支持自定义 label、name、extra 参数
 
 import React, { useState, useCallback, useRef } from 'react';
-import { Form, Input, Select, Typography } from 'antd';
+import { Form, Input, Select } from 'antd';
 import { fetchData } from '@common/axiosConfig';
 import { SearchedPlayer } from '@ecuc/shared/types/player.types';
 import { BindPlayerDetailBasic } from '@ecuc/shared/types/player.types';
 import { gLang } from '@common/language';
-
-const { Paragraph } = Typography;
 
 // 账户匹配选项接口
 export interface AccountMatchingOptions {
@@ -195,8 +193,6 @@ const AccountMatchingFormItem: React.FC<AccountMatchingFormItemProps> = ({
     name,
     label,
     extra,
-    required = false,
-    requiredMessage,
     matchingOptions = {},
     chooseFieldName,
     chooseRequired = false,
@@ -215,25 +211,11 @@ const AccountMatchingFormItem: React.FC<AccountMatchingFormItemProps> = ({
     const accountMatching = useAccountMatching(matchingOptions);
     const form = Form.useFormInstance();
 
-    // 构建输入框验证规则
+    // 构建输入框验证规则（不设置required，避免显示必填错误）
     const inputRules = [
         ...rules,
-        ...(required
-            ? [
-                  {
-                      required: true,
-                      message: requiredMessage || gLang('ecDetail.accountMatching.fieldRequired'),
-                  },
-              ]
-            : []),
         {
             validator: (_: any, value: any) => {
-                // 如果有下拉选择字段且未选择，则验证失败
-                if (chooseFieldName && chooseRequired && !form.getFieldValue(chooseFieldName)) {
-                    return Promise.reject(
-                        chooseRequiredMessage || gLang('ecDetail.accountMatching.dropDownRequired')
-                    );
-                }
                 if (!value) return Promise.resolve();
                 if (
                     accountMatching.availableUsers.length > 0 &&
@@ -246,10 +228,10 @@ const AccountMatchingFormItem: React.FC<AccountMatchingFormItemProps> = ({
         },
     ];
 
-    // 构建下拉选择验证规则
+    // 构建下拉选择验证规则（只在有下拉字段时才验证）
     const selectRules = [
         ...chooseRules,
-        ...(chooseRequired
+        ...(chooseRequired && chooseFieldName
             ? [
                   {
                       required: true,
@@ -265,6 +247,7 @@ const AccountMatchingFormItem: React.FC<AccountMatchingFormItemProps> = ({
         accountMatching.handleChooseChange(value, ecid => {
             if (form) {
                 form.setFieldsValue({ [name]: ecid, [chooseFieldName || '']: ecid });
+                form.validateFields([name]).catch(() => {});
             }
             if (onUserSelect) {
                 onUserSelect(ecid);
@@ -286,9 +269,13 @@ const AccountMatchingFormItem: React.FC<AccountMatchingFormItemProps> = ({
     return (
         <>
             {/* 输入框 */}
-            <Form.Item name={name} label={label} extra={extra} rules={inputRules}>
+            <Form.Item
+                name={name}
+                label={label}
+                extra={extra}
+                rules={inputRules}
+            >
                 <Input
-                    value={accountMatching.inputValue}
                     onChange={accountMatching.handleInputChange}
                     onBlur={handleInputBlur}
                     placeholder={placeholder}
@@ -315,13 +302,12 @@ const AccountMatchingFormItem: React.FC<AccountMatchingFormItemProps> = ({
                         allowClear
                         loading={accountMatching.isSearching}
                         placeholder={choosePlaceholder}
+                        disabled={!form.getFieldValue(name) || accountMatching.availableUsers.length === 0}
                         style={style}
                     >
                         {accountMatching.availableUsers.map(user => (
                             <Select.Option key={user.ecid} value={user.ecid}>
-                                <Paragraph style={{ marginBottom: '-4px' }}>
-                                    LV.{user.level} - {user.name}
-                                </Paragraph>
+                                <span>LV.{user.level} - {user.name}</span>
                             </Select.Option>
                         ))}
                     </Select>

@@ -1,32 +1,45 @@
-import { useEffect, useState, useMemo } from 'react';
-import { Skeleton, Space, Typography } from 'antd';
+import { useEffect, useMemo, useState, type ComponentType, type CSSProperties, type FC } from 'react';
+import {
+    Badge,
+    Button,
+    Grid,
+    Modal,
+    Skeleton,
+    Space,
+} from 'antd';
+import {
+    ClusterOutlined,
+    CalendarOutlined,
+    FieldTimeOutlined,
+    LinkOutlined,
+    NumberOutlined,
+    QqOutlined,
+    SafetyCertificateOutlined,
+    UserOutlined,
+} from '@ant-design/icons';
 import { fetchData } from '@common/axiosConfig';
 import { TicketAccount } from '@ecuc/shared/types/ticket.types';
 import { MediaListData, MediaStatus } from '@ecuc/shared/types/media.types';
-import MediaInfo from './components/MediaInfo';
 import MediaApplyTicket from './components/media-ticket/MediaApplyTicket';
 import MonthlyReviewTicket from './components/media-ticket/MonthlyReviewTicket';
 import RebindingTicket from './components/media-ticket/RebindingTicket';
-import { MediaActionCard } from './components/MediaActionCard';
 import { gLang } from '@common/language';
-import PageTitle from '@common/components/PageTitle/PageTitle';
-import CardItem from '@common/components/CardItem/CardItem';
-import { IoDocumentText } from 'react-icons/io5';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { IoDocumentText } from 'react-icons/io5';
 import { RiAccountCircleFill, RiShoppingBag3Fill } from 'react-icons/ri';
+import { FaBilibili } from 'react-icons/fa6';
 import Wrapper from '@common/components/Wrapper/Wrapper';
-import PageIntro from '../../components/PageIntro/PageIntro';
 import ErrorDisplay from '../../components/ErrorDisplay';
 import usePageTitle from '@common/hooks/usePageTitle';
-import { useTheme, type CustomThemeName } from '@common/contexts/ThemeContext';
-import { CUSTOM_THEME_PALETTES } from '@common/themes/customPalettes';
+import { useTheme } from '@common/contexts/ThemeContext';
+import dayjs from 'dayjs';
+import styles from './MediaCenter.module.css';
 
-// 淡入动画
 const fadeInUpAnimation = `
 @keyframes fadeInUp {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(12px);
     }
     to {
         opacity: 1;
@@ -35,7 +48,6 @@ const fadeInUpAnimation = `
 }
 `;
 
-// 添加动画样式到文档头部
 if (typeof document !== 'undefined' && !document.getElementById('fadeInUpAnimation')) {
     const style = document.createElement('style');
     style.id = 'fadeInUpAnimation';
@@ -43,16 +55,53 @@ if (typeof document !== 'undefined' && !document.getElementById('fadeInUpAnimati
     document.head.appendChild(style);
 }
 
-const { Paragraph } = Typography;
+const { useBreakpoint } = Grid;
+const CONSOLE_BACKGROUND_POOL = [
+    '/image/media/backgrounds/20211009-235358.png',
+    '/image/media/backgrounds/20211009-235523.png',
+    '/image/media/backgrounds/20211009-235528.png',
+    '/image/media/backgrounds/Background@1x.png',
+    '/image/media/backgrounds/mw.png',
+    '/image/media/backgrounds/pit.png',
+];
+
+interface HoloNodeProps {
+    title: string;
+    icon: ComponentType<{ style?: CSSProperties }>;
+    onClick: () => void;
+    floatDelayMs?: number;
+}
+
+const HoloNode: FC<HoloNodeProps> = ({ title, icon, onClick, floatDelayMs = 0 }) => {
+    const IconComp = icon;
+    return (
+        <button
+            type="button"
+            className={styles.holoNode}
+            style={{
+                ['--float-delay' as any]: `${floatDelayMs}ms`,
+            }}
+            onClick={onClick}
+        >
+            <span className={styles.holoNodeIcon}>
+                <IconComp style={{ fontSize: 23, color: '#bff5ff' }} />
+            </span>
+            <span className={styles.holoNodeTitle}>{title}</span>
+        </button>
+    );
+};
 
 const MediaCenter = () => {
-    usePageTitle(); // 使用页面标题管理Hook
+    usePageTitle();
 
-    const { isDark, getThemeColor, customTheme } = useTheme();
     const navigate = useNavigate();
     const location = useLocation();
+    const screens = useBreakpoint();
+    const { isDark } = useTheme();
+    const isMobile = !screens.md;
+    const isTablet = !!screens.md && !screens.xl;
+    const [selectedBackground, setSelectedBackground] = useState<string>('');
 
-    // Check if this is the first visit after login
     const isFirstVisitAfterLogin = useMemo(() => {
         const hasShownAnimation = sessionStorage.getItem('mediaAnimationShown');
         const isFromLogin =
@@ -60,7 +109,6 @@ const MediaCenter = () => {
             document.referrer.includes('/login/callback') ||
             location.state?.fromLogin === true;
 
-        // If coming from login and haven't shown animation yet, show full animation
         if (isFromLogin && !hasShownAnimation) {
             sessionStorage.setItem('mediaAnimationShown', 'true');
             return true;
@@ -68,71 +116,15 @@ const MediaCenter = () => {
         return false;
     }, [location.state]);
 
-    // Animation delay: longer for first visit (0.1s), shorter for subsequent visits (0.02s)
     const animationDelay = isFirstVisitAfterLogin ? 0.1 : 0.02;
-    type PaletteKey = keyof (typeof CUSTOM_THEME_PALETTES)[CustomThemeName];
-    const getCustomColor = (key: PaletteKey) => {
-        if (!customTheme) {
-            return undefined;
-        }
-        return {
-            [customTheme]: CUSTOM_THEME_PALETTES[customTheme][key],
-        } as Partial<Record<CustomThemeName, string>>;
-    };
-    const bodyTextColor = getThemeColor({
-        light: 'rgba(0, 0, 0, 0.85)',
-        dark: 'rgba(255, 255, 255, 0.85)',
-        custom: getCustomColor('textPrimary'),
-    });
-    const linkColor = getThemeColor({
-        light: '#1890ff',
-        dark: '#69c0ff',
-        custom: getCustomColor('accent'),
-    });
-    const guidelinesAccent = getThemeColor({
-        light: '#195df5',
-        dark: '#69c0ff',
-        custom: getCustomColor('accent'),
-    });
-    const applyAccent = getThemeColor({
-        light: '#f5af19',
-        dark: '#ffd666',
-        custom: getCustomColor('accent'),
-    });
-    const shopAccent = getThemeColor({
-        light: '#10b981',
-        dark: '#36cfc9',
-        custom: getCustomColor('accent'),
-    });
-    const cardBackground = getThemeColor({
-        light: '#FFFFFF',
-        dark: '#171717',
-        custom: getCustomColor('surface'),
-    });
-    const cardHover = getThemeColor({
-        light: '#F5F5F5',
-        dark: '#2A2A2A',
-        custom: getCustomColor('hover'),
-    });
-    const cardBorder = getThemeColor({
-        light: '#E0E0E0',
-        dark: '#303030',
-        custom: getCustomColor('border'),
-    });
-    const cardText = getThemeColor({
-        light: '#1A1A1A',
-        dark: '#EEF2F7',
-        custom: getCustomColor('textPrimary'),
-    });
-    const cardDesc = getThemeColor({
-        light: '#00000099',
-        dark: '#FFFFFF99',
-        custom: getCustomColor('textMuted'),
-    });
+
     const [isLoading, setIsLoading] = useState(true);
     const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
     const [isMonthModalOpen, setIsMonthModalOpen] = useState(false);
     const [updateECID, setUpdateECID] = useState(false);
+    const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+    const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+    const [isConsoleExpanded, setIsConsoleExpanded] = useState(false);
     const [chooseGameList, setChooseGameList] = useState<TicketAccount[]>([]);
     const [ECID, setECID] = useState<string>('');
     const [mediaData, setMediaData] = useState<MediaListData>();
@@ -218,6 +210,33 @@ const MediaCenter = () => {
         fetchMediaData();
     }, []);
 
+    useEffect(() => {
+        const shuffled = [...CONSOLE_BACKGROUND_POOL].sort(() => Math.random() - 0.5);
+        let active = true;
+
+        const tryLoad = (index: number) => {
+            if (!active || index >= shuffled.length) {
+                return;
+            }
+            const img = new Image();
+            img.onload = () => {
+                if (active) {
+                    setSelectedBackground(shuffled[index]);
+                }
+            };
+            img.onerror = () => {
+                tryLoad(index + 1);
+            };
+            img.src = shuffled[index];
+        };
+
+        tryLoad(0);
+
+        return () => {
+            active = false;
+        };
+    }, []);
+
     if (isLoading) {
         return (
             <Wrapper>
@@ -229,232 +248,436 @@ const MediaCenter = () => {
     if (error) {
         return (
             <Wrapper>
-                <PageTitle title={gLang('mediaCenter.title')} />
                 <ErrorDisplay onRetry={fetchMediaData} />
             </Wrapper>
         );
     }
 
+    const expireDateText = mediaData?.media?.expireDate
+        ? dayjs(mediaData.media.expireDate).format('YYYY-MM-DD')
+        : gLang('noExpiration');
+    const lastReviewedText = mediaData?.media?.lastReviewed
+        ? dayjs(mediaData.media.lastReviewed).format('YYYY-MM-DD')
+        : gLang('notReviewed');
+
     let cardIndex = 0;
 
+    const canShowExcellentGroup = mediaData?.media?.status === MediaStatus.ExcellentCreator;
+    const isExcellentCreator = mediaData?.media?.status === MediaStatus.ExcellentCreator;
+    const permissionLabel = isExcellentCreator
+        ? gLang('mediaCenter.excellentMonthPermissionLabel')
+        : gLang('mediaCenter.shopMonthPermissionLabel');
+    const isPermissionStatus = [
+        MediaStatus.ActiveCreator,
+        MediaStatus.ExcellentCreator,
+    ].includes((mediaData?.media?.status ?? -1) as MediaStatus);
+    const hasExpireDate = !!mediaData?.media?.expireDate;
+    const notExpired = hasExpireDate
+        ? dayjs(mediaData?.media?.expireDate).isAfter(dayjs().endOf('day'))
+        : true;
+    const hasMonthlyPermission = isPermissionStatus && notExpired;
+    const holoLines = isTablet
+        ? [
+              { x1: 225, y1: 318, x2: 500, y2: 332 },
+              { x1: 500, y1: 332, x2: 566, y2: 185 },
+              { x1: 500, y1: 332, x2: 774, y2: 262 },
+              { x1: 500, y1: 332, x2: 772, y2: 418 },
+              { x1: 500, y1: 332, x2: 390, y2: 468 },
+              { x1: 500, y1: 332, x2: 838, y2: 515 },
+          ]
+        : [
+              { x1: 214, y1: 315, x2: 500, y2: 330 },
+              { x1: 500, y1: 330, x2: 560, y2: 172 },
+              { x1: 500, y1: 330, x2: 788, y2: 248 },
+              { x1: 500, y1: 330, x2: 788, y2: 430 },
+              { x1: 500, y1: 330, x2: 388, y2: 468 },
+              { x1: 500, y1: 330, x2: 876, y2: 500 },
+          ];
+
     return (
-        <Wrapper>
+        <Wrapper
+            maxWidth={9999}
+            style={{ maxWidth: '100%', margin: 0 }}
+        >
             <div
-                style={{
-                    opacity: 0,
-                    animation: `fadeInUp 0.5s ease-in-out ${cardIndex++ * animationDelay}s forwards`,
-                }}
-            >
-                <PageTitle title={gLang('mediaCenter.title')} />
-            </div>
-
+                className={styles.pageFullBackground}
+                style={
+                    {
+                        '--media-console-page-bg': `url('${selectedBackground}')`,
+                    } as CSSProperties
+                }
+            />
             <div
-                style={{
-                    opacity: 0,
-                    animation: `fadeInUp 0.5s ease-in-out ${cardIndex++ * animationDelay}s forwards`,
-                }}
+                className={`${styles.consoleRoot} ${isDark ? styles.themeDark : styles.themeLight}`}
+                style={
+                    {
+                        '--media-console-bg': `url('${selectedBackground}')`,
+                    } as CSSProperties
+                }
             >
-                <PageIntro imageSrc={'/image/media-center.png'} imgSize={0.6} imgPosition={'right'}>
-                    <Paragraph style={{ color: bodyTextColor }}>
-                        {gLang('mediaCenter.welcomeTitle')}
-                    </Paragraph>
-                    <Paragraph style={{ color: bodyTextColor }}>
-                        {gLang('mediaCenter.welcomeDesc1')}
-                        <a
-                            onClick={() => navigate('/shop-guidelines')}
-                            style={{ color: linkColor, cursor: 'pointer' }}
-                        >
-                            {gLang('mediaCenter.shopGuidelines')}
-                        </a>
-                        {gLang('mediaCenter.welcomeDesc2')}
-                        <a
-                            onClick={() => navigate('/media-guidelines')}
-                            style={{ color: linkColor, cursor: 'pointer' }}
-                        >
-                            {gLang('mediaCenter.creatorProgram')}
-                        </a>
-                        {gLang('mediaCenter.welcomeDesc3')}
-                    </Paragraph>
-                    {mediaData?.media?.status === MediaStatus.Player && (
-                        <Paragraph style={{ color: bodyTextColor }}>
-                            {gLang('mediaCenter.notCreator')}
-                        </Paragraph>
-                    )}
-                    {mediaData?.media?.status &&
-                        [
-                            MediaStatus.PendingReview,
-                            MediaStatus.ExpiredCreator,
-                            MediaStatus.ActiveCreator,
-                            MediaStatus.ExcellentCreator,
-                        ].includes(mediaData.media.status as MediaStatus) && (
-                            <Paragraph style={{ color: bodyTextColor }}>
-                                {/* 动态群提示 */}
-                                {(groupData?.shopgroup1 || groupData?.shopgroup2) && (
-                                    <>
-                                        <span>{gLang('mediaCenter.joinGroupDesc')}</span>
-                                        {groupData.shopgroup1 && (
-                                            <a
-                                                href={groupData.shopgrouplink1}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                style={{ color: linkColor }}
-                                            >
-                                                {groupData.shopgroup1}
-                                            </a>
-                                        )}
-                                        {groupData.shopgroup1 && groupData.shopgroup2 && ' | '}
-                                        {groupData.shopgroup2 && (
-                                            <a
-                                                href={groupData.shopgrouplink2}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                style={{ color: linkColor }}
-                                            >
-                                                {groupData.shopgroup2}
-                                            </a>
-                                        )}
-                                    </>
-                                )}
-                                {(groupData?.shopgroup1 || groupData?.shopgroup2) &&
-                                    groupData?.status3group && <br />}
-                                {groupData?.status3group && (
-                                    <>
-                                        <span>{gLang('mediaCenter.joinstatus3groupDesc')}</span>
-                                        <a
-                                            href={groupData.status3grouplink}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            style={{ color: linkColor }}
-                                        >
-                                            {groupData.status3group}
-                                        </a>
-                                    </>
-                                )}
-                            </Paragraph>
-                        )}
-                </PageIntro>
-            </div>
-
-            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                {/* 媒体信息 */}
                 <div
+                    className={styles.consoleHeader}
                     style={{
                         opacity: 0,
-                        animation: `fadeInUp 0.5s ease-in-out ${cardIndex++ * animationDelay}s forwards`,
+                        animation: `fadeInUp 0.55s ease ${cardIndex++ * animationDelay}s forwards`,
                     }}
                 >
-                    <MediaInfo mediaData={mediaData} />
+                    <div className={styles.consoleTitleCn}>{gLang('mediaCenter.title')}</div>
+                    <div className={styles.consoleTitleEn}>{gLang('mediaCenter.nextGenConsole')}</div>
                 </div>
 
-                {/* 查看创作者守则 */}
-                <div
-                    style={{
-                        opacity: 0,
-                        animation: `fadeInUp 0.5s ease-in-out ${cardIndex++ * animationDelay}s forwards`,
-                    }}
-                >
-                    <CardItem
-                        Icon={IoDocumentText}
-                        color={guidelinesAccent}
-                        description={gLang('mediaList.lookGuidelinesDesc')}
-                        isDark={isDark}
-                        isResponsive={false}
-                        onClick={() => navigate('/shop-guidelines')}
-                        title={gLang('mediaList.lookGuidelines')}
-                        backgroundColor={cardBackground}
-                        hoverColor={cardHover}
-                        borderColor={cardBorder}
-                        textColor={cardText}
-                        descColor={cardDesc}
-                    />
-                </div>
+                <div className={styles.holoStage}>
+                    <svg
+                        className={`${styles.holoLinkLayer} ${isConsoleExpanded ? styles.nodeVisible : styles.nodeHidden}`}
+                        viewBox="0 0 1000 620"
+                        preserveAspectRatio="none"
+                    >
+                        {holoLines.map((line, index) => (
+                            <line
+                                key={index}
+                                x1={line.x1}
+                                y1={line.y1}
+                                x2={line.x2}
+                                y2={line.y2}
+                                style={
+                                    {
+                                        ['--line-delay' as any]: `${index * 70}ms`,
+                                    } as CSSProperties
+                                }
+                            />
+                        ))}
+                    </svg>
 
-                {/* 商城页面 - 只在媒体账号status为0~3时显示 */}
-                <div
-                    style={{
-                        opacity: 0,
-                        animation: `fadeInUp 0.5s ease-in-out ${cardIndex++ * animationDelay}s forwards`,
-                    }}
-                >
-                    <CardItem
-                        Icon={RiShoppingBag3Fill}
-                        color={shopAccent}
-                        description={gLang('mediaCenter.shopDesc')}
-                        isDark={isDark}
-                        isResponsive={false}
-                        onClick={() => navigate('/media/shop')}
-                        title={gLang('mediaCenter.shopTitle')}
-                        backgroundColor={cardBackground}
-                        hoverColor={cardHover}
-                        borderColor={cardBorder}
-                        textColor={cardText}
-                        descColor={cardDesc}
-                    />
-                </div>
-
-                {/* 媒体操作卡片，申请成为土豆创作者或提交月审，title和content根据内容改变 */}
-                <div
-                    style={{
-                        opacity: 0,
-                        animation: `fadeInUp 0.5s ease-in-out ${cardIndex++ * animationDelay}s forwards`,
-                    }}
-                >
-                    <MediaActionCard
-                        mediaData={mediaData}
-                        onAction={() => {
-                            // 检查是否可以显示月审（状态为1~3）
-                            const canShowMonthlyAudit = () => {
-                                if (!mediaData?.media?.status) return false;
-                                return [
-                                    MediaStatus.ExpiredCreator,
-                                    MediaStatus.ActiveCreator,
-                                    MediaStatus.ExcellentCreator,
-                                ].includes(mediaData.media.status as MediaStatus);
-                            };
-
-                            if (mediaData?.is_media_member || canShowMonthlyAudit()) {
-                                setIsMonthModalOpen(true);
-                            } else {
-                                setIsApplyModalOpen(true);
-                            }
-                        }}
-                    />
-                </div>
-
-                {/* 更换媒体ECID，仅在是创作者的时候出现 */}
-                {mediaData?.is_media_member && (
                     <div
+                        className={`${styles.ePointCrystal} ${isConsoleExpanded ? styles.nodeVisible : styles.nodeHidden}`}
                         style={{
-                            opacity: 0,
-                            animation: `fadeInUp 0.5s ease-in-out ${cardIndex++ * animationDelay}s forwards`,
+                            animation: isConsoleExpanded
+                                ? `fadeInUp 0.55s ease ${cardIndex++ * animationDelay}s forwards`
+                                : undefined,
                         }}
                     >
-                        <CardItem
-                            Icon={RiAccountCircleFill}
-                            title={gLang('mediaList.updateECIDTitle')}
-                            description={gLang('mediaList.updateECIDIntro')}
-                            isDark={isDark}
-                            isResponsive={false}
-                            onClick={() => setUpdateECID(true)}
-                            color={applyAccent}
-                            backgroundColor={cardBackground}
-                            hoverColor={cardHover}
-                            borderColor={cardBorder}
-                            textColor={cardText}
-                            descColor={cardDesc}
+                        <div className={styles.crystalValue}>{mediaData?.media?.EBalance ?? 0}</div>
+                        <div className={styles.crystalLabel}>{gLang('mediaUser.EBalance')}</div>
+                    </div>
+
+                    <div
+                        className={styles.mascotZone}
+                        style={{
+                            opacity: 0,
+                            animation: `fadeInUp 0.55s ease ${cardIndex++ * animationDelay}s forwards`,
+                        }}
+                    >
+                        <button
+                            type="button"
+                            className={styles.mascotButton}
+                            onClick={() => setIsConsoleExpanded(value => !value)}
+                            aria-label="open creator hologram"
+                        >
+                            <span className={styles.ringOuter} />
+                            <span className={styles.ringInner} />
+                            <img src="/image/media-center.png" alt="" className={styles.mascotImage} />
+                        </button>
+                        <div className={styles.holoHint}>
+                            {isConsoleExpanded
+                                ? gLang('mediaCenter.holoHintExpanded')
+                                : gLang('mediaCenter.holoHint')}
+                        </div>
+                        {isConsoleExpanded && (
+                            <Button
+                                type="primary"
+                                className={styles.infoEntryButton}
+                                onClick={() => setIsInfoModalOpen(true)}
+                            >
+                                {gLang('mediaCenter.openHoloInfo')}
+                            </Button>
+                        )}
+                    </div>
+
+                    <div
+                        className={`${styles.nodeSlot} ${styles.nodeTop} ${isConsoleExpanded ? styles.nodeVisible : styles.nodeHidden}`}
+                        style={{ ['--node-delay' as any]: '20ms' } as CSSProperties}
+                    >
+                        <HoloNode
+                            title={gLang('mediaList.lookGuidelines')}
+                            icon={IoDocumentText}
+                            floatDelayMs={0}
+                            onClick={() => navigate('/shop-guidelines')}
                         />
                     </div>
-                )}
-            </Space>
+                    <div
+                        className={`${styles.nodeSlot} ${styles.nodeRight} ${isConsoleExpanded ? styles.nodeVisible : styles.nodeHidden}`}
+                        style={{ ['--node-delay' as any]: '80ms' } as CSSProperties}
+                    >
+                        <HoloNode
+                            title={gLang('mediaCenter.shopTitle')}
+                            icon={RiShoppingBag3Fill}
+                            floatDelayMs={700}
+                            onClick={() => navigate('/media/shop')}
+                        />
+                    </div>
+                    <div
+                        className={`${styles.nodeSlot} ${styles.nodeBottomRight} ${isConsoleExpanded ? styles.nodeVisible : styles.nodeHidden}`}
+                        style={{ ['--node-delay' as any]: '130ms' } as CSSProperties}
+                    >
+                        <HoloNode
+                            title={gLang('mediaAction.applyEPoints')}
+                            icon={FaBilibili}
+                            floatDelayMs={1200}
+                            onClick={() => {
+                                const canShowMonthlyAudit = () => {
+                                    if (!mediaData?.media?.status) return false;
+                                    return [
+                                        MediaStatus.ExpiredCreator,
+                                        MediaStatus.ActiveCreator,
+                                        MediaStatus.ExcellentCreator,
+                                    ].includes(mediaData.media.status as MediaStatus);
+                                };
+                                if (mediaData?.is_media_member || canShowMonthlyAudit()) {
+                                    setIsMonthModalOpen(true);
+                                } else {
+                                    setIsApplyModalOpen(true);
+                                }
+                            }}
+                        />
+                    </div>
+                    <div
+                        className={`${styles.nodeSlot} ${styles.nodeBottomLeft} ${isConsoleExpanded ? styles.nodeVisible : styles.nodeHidden}`}
+                        style={{ ['--node-delay' as any]: '180ms' } as CSSProperties}
+                    >
+                        <HoloNode
+                            title={gLang('mediaList.updateECIDTitle')}
+                            icon={RiAccountCircleFill}
+                            floatDelayMs={1600}
+                            onClick={() => setUpdateECID(true)}
+                        />
+                    </div>
 
-            {/* 媒体申请模态框 */}
+                    <div
+                        className={`${styles.nodeSlot} ${styles.nodeGroup} ${isConsoleExpanded ? styles.nodeVisible : styles.nodeHidden}`}
+                        style={{ ['--node-delay' as any]: '230ms' } as CSSProperties}
+                    >
+                        <HoloNode
+                            title={gLang('mediaCenter.groupApplyNode')}
+                            icon={ClusterOutlined}
+                            floatDelayMs={2200}
+                            onClick={() => setIsGroupModalOpen(true)}
+                        />
+                    </div>
+
+                </div>
+            </div>
+
+            <Modal
+                open={isGroupModalOpen}
+                onCancel={() => setIsGroupModalOpen(false)}
+                footer={null}
+                width={isMobile ? '100vw' : 560}
+                centered={!isMobile}
+                className={`${isMobile ? styles.holoModalMobile : styles.holoModalDesktop} ${
+                    isDark ? styles.infoModalDark : styles.infoModalLight
+                }`}
+                style={
+                    isMobile
+                        ? {
+                              top: 0,
+                              maxWidth: '100vw',
+                              paddingBottom: 0,
+                          }
+                        : undefined
+                }
+                styles={{
+                    header: {
+                        background: 'linear-gradient(135deg, #29135f 0%, #4529a4 100%)',
+                        borderBottom: '1px solid rgba(255,255,255,0.08)',
+                        marginBottom: 0,
+                    },
+                    body: {
+                        padding: isMobile ? '16px 14px 24px' : '18px 20px 22px',
+                    },
+                }}
+                title={<span className={styles.modalTitle}>{gLang('mediaCenter.groupModalTitle')}</span>}
+            >
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                    {(groupData?.shopgroup1 || groupData?.shopgroup2) && (
+                        <div className={styles.infoRow}>
+                            <div className={styles.infoKey}>{gLang('mediaCenter.joinGroupDesc')}</div>
+                            <div className={styles.infoValue}>
+                                {groupData?.shopgroup1 && (
+                                    <a
+                                        href={groupData.shopgrouplink1}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className={styles.infoLinkPlain}
+                                    >
+                                        {groupData.shopgroup1}
+                                    </a>
+                                )}
+                                {groupData?.shopgroup1 && groupData?.shopgroup2 && <span> | </span>}
+                                {groupData?.shopgroup2 && (
+                                    <a
+                                        href={groupData.shopgrouplink2}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className={styles.infoLinkPlain}
+                                    >
+                                        {groupData.shopgroup2}
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {canShowExcellentGroup && groupData?.status3group && (
+                        <div className={styles.infoRow}>
+                            <div className={styles.infoKey}>{gLang('mediaCenter.joinstatus3groupDesc')}</div>
+                            <div className={styles.infoValue}>
+                                <a
+                                    href={groupData.status3grouplink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={styles.infoLinkPlain}
+                                >
+                                    {groupData.status3group}
+                                </a>
+                            </div>
+                        </div>
+                    )}
+
+                    {!groupData?.shopgroup1 &&
+                        !groupData?.shopgroup2 &&
+                        !(canShowExcellentGroup && groupData?.status3group) && (
+                            <div className={styles.infoRow}>
+                                <div className={styles.infoKey}>{gLang('mediaCenter.groupNoData')}</div>
+                            </div>
+                        )}
+                </Space>
+            </Modal>
+
+            <Modal
+                open={isInfoModalOpen}
+                onCancel={() => setIsInfoModalOpen(false)}
+                footer={null}
+                width={isMobile ? '100vw' : '50vw'}
+                centered={!isMobile}
+                className={`${isMobile ? styles.holoModalMobile : styles.holoModalDesktop} ${
+                    isDark ? styles.infoModalDark : styles.infoModalLight
+                }`}
+                style={
+                    isMobile
+                        ? {
+                              top: 0,
+                              maxWidth: '100vw',
+                              paddingBottom: 0,
+                          }
+                        : undefined
+                }
+                styles={{
+                    header: {
+                        background: 'linear-gradient(135deg, #29135f 0%, #4529a4 100%)',
+                        borderBottom: '1px solid rgba(255,255,255,0.08)',
+                        marginBottom: 0,
+                    },
+                    body: {
+                        padding: isMobile ? '16px 14px 24px' : '18px 20px 22px',
+                    },
+                }}
+                title={
+                    <div className={styles.modalHeader}>
+                        <img src="/image/media-center.png" alt="" className={styles.modalMascot} />
+                        <span className={styles.modalTitle}>{gLang('mediaCenter.holoInfoTitle')}</span>
+                    </div>
+                }
+            >
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                    <div className={styles.infoRow}>
+                        <div className={styles.infoKey}>
+                            <SafetyCertificateOutlined />
+                            <span>{permissionLabel}</span>
+                        </div>
+                        <div className={styles.infoValue}>
+                            <Badge
+                                status={hasMonthlyPermission ? 'success' : 'default'}
+                                text={
+                                    <span className={styles.statusValue}>
+                                        {hasMonthlyPermission
+                                            ? gLang('mediaCenter.permissionYes')
+                                            : gLang('mediaCenter.permissionNo')}
+                                    </span>
+                                }
+                            />
+                        </div>
+                    </div>
+
+                    <div className={styles.infoRow}>
+                        <div className={styles.infoKey}>
+                            <NumberOutlined />
+                            <span>{gLang('mediaUser.id')}</span>
+                        </div>
+                        <div className={styles.infoValue}>{mediaData?.media?.id || 'N/A'}</div>
+                    </div>
+
+                    <div className={styles.infoRow}>
+                        <div className={styles.infoKey}>
+                            <QqOutlined />
+                            <span>{gLang('mediaUser.QQNumber')}</span>
+                        </div>
+                        <div className={styles.infoValue}>{mediaData?.media?.QQNumber || gLang('unbound')}</div>
+                    </div>
+
+                    <div className={styles.infoRow}>
+                        <div className={styles.infoKey}>
+                            <LinkOutlined />
+                            <span>{gLang('mediaUser.link')}</span>
+                        </div>
+                        <div className={styles.infoValue}>
+                            {mediaData?.media?.link ? (
+                                <Button
+                                    type="link"
+                                    href={mediaData.media.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={styles.infoLink}
+                                >
+                                    {gLang('viewLink')}
+                                </Button>
+                            ) : (
+                                'N/A'
+                            )}
+                        </div>
+                    </div>
+
+                    <div className={styles.infoRow}>
+                        <div className={styles.infoKey}>
+                            <UserOutlined />
+                            <span>{gLang('mediaUser.ECID')}</span>
+                        </div>
+                        <div className={styles.infoValue}>{mediaData?.media?.ECID || 'N/A'}</div>
+                    </div>
+
+                    <div className={styles.infoRow}>
+                        <div className={styles.infoKey}>
+                            <CalendarOutlined />
+                            <span>{gLang('mediaUser.expireDate')}</span>
+                        </div>
+                        <div className={styles.infoValue}>{expireDateText}</div>
+                    </div>
+
+                    <div className={styles.infoRow}>
+                        <div className={styles.infoKey}>
+                            <FieldTimeOutlined />
+                            <span>{gLang('mediaUser.lastReviewed')}</span>
+                        </div>
+                        <div className={styles.infoValue}>{lastReviewedText}</div>
+                    </div>
+                </Space>
+            </Modal>
+
             <MediaApplyTicket
                 isOpen={isApplyModalOpen}
                 onClose={() => setIsApplyModalOpen(false)}
                 chooseGameList={chooseGameList}
             />
 
-            {/* E点申请模态框 */}
             <MonthlyReviewTicket
                 isOpen={isMonthModalOpen}
                 onClose={() => setIsMonthModalOpen(false)}
@@ -462,7 +685,6 @@ const MediaCenter = () => {
                 platform={mediaData?.media?.mpa?.split('-')[0]}
             />
 
-            {/* 更换ECID模态框 */}
             <RebindingTicket
                 isOpen={updateECID}
                 onClose={() => setUpdateECID(false)}

@@ -36,6 +36,60 @@ export type UserKey = {
 };
 
 /**
+ * OpenID验证码
+ */
+export type OpenidVerificationCode = {
+    openid: string;
+    code: number;
+    email: string;
+    is_used: boolean;
+    expire_time: string;
+    created_at: string;
+};
+
+/**
+ * 验证状态响应
+ */
+export type VerificationStatusResponse = {
+    remainingAccounts: number;
+    accountCreationLimit: number;
+    accountCreatedCount: number;
+    currentCode?: {
+        code: number;
+        email: string;
+        expireTime: string;
+    };
+};
+
+/**
+ * 请求验证码响应
+ */
+export type RequestVerificationCodeResponse = {
+    code: number;
+    email: string;
+    expireTime: string;
+    remainingAccounts: number;
+};
+
+/**
+ * 验证并绑定ECID请求
+ */
+export type VerifyAndBindRequest = {
+    code: string;
+    ecid: string;
+};
+
+/**
+ * 验证并绑定ECID响应
+ */
+export type VerifyAndBindResponse = {
+    success: boolean;
+    openid?: string;
+    email?: string;
+    message?: string;
+};
+
+/**
  * 用户密保邮箱设置
  */
 export type UserEmailSecurity = {

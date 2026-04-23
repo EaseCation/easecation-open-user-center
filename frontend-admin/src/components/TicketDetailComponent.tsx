@@ -407,6 +407,7 @@ const TicketDetailComponent: React.FC<{
         }
 
         // 将 #数字 或 1 开头的六位数字渲染为链接按钮（仅管理员）
+        // 但排除转交工单时的客服工号（格式：客服 #数字）
         if (isAdmin && (/#\d+\b/.test(processed) || /\b1\d{5}\b/.test(processed))) {
             // 拆分并逐段渲染，#tid 和六位 TID 都渲染为可点击链接
             const parts = processed.split(/(#\d+\b|\b1\d{5}\b)/g);
@@ -415,6 +416,13 @@ const TicketDetailComponent: React.FC<{
                     {parts.map((part, idx) => {
                         const hashMatch = /^#(\d+)$/.exec(part);
                         if (hashMatch) {
+                            // 检查前面是否是"客服"，如果是则不转换为工单链接
+                            const prevPart = parts[idx - 1] || '';
+                            if (prevPart.includes(gLang('staff'))) {
+                                return (
+                                    <span key={`staff_${idx}_${part}`} dangerouslySetInnerHTML={{ __html: part }} />
+                                );
+                            }
                             const tidNum = Number(hashMatch[1]);
                             return (
                                 <Button

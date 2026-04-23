@@ -41,7 +41,7 @@ export default defineConfig(() => ({
         exclude: ['@ecuc/shared', '@common'],
     },
     server: {
-        port: 9001,
+        port: 9101,
         fs: {
             // 允许访问上级目录下的 shared 包
             allow: [path.resolve(__dirname, '..')],

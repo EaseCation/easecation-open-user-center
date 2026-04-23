@@ -21,6 +21,7 @@ import { ReloadOutlined } from '@ant-design/icons';
 import ErrorDisplay from '../../components/ErrorDisplay';
 import { useTheme } from '@common/contexts/ThemeContext';
 import { CUSTOM_THEME_PALETTES } from '@common/themes/customPalettes';
+import './PublicScoreTop.css';
 
 const PublicScoreTop = () => {
     const { getThemeColor } = useTheme();
@@ -63,6 +64,8 @@ const PublicScoreTop = () => {
     const [empty, setEmpty] = useState(false);
     const [pc, setPC] = useState(false);
     const [error, setError] = useState<boolean>(false);
+    const [showTabs, setShowTabs] = useState(false);
+    const [showCards, setShowCards] = useState(false);
 
     const [tabItems, setTabItems] = useState<TabsProps['items']>([
         {
@@ -79,11 +82,23 @@ const PublicScoreTop = () => {
     const onRefresh = () => {
         setLoading(true);
         setError(false);
+        setShowTabs(false);
+        setShowCards(false);
         fetchData({
             url: '/ec/scoretop',
             method: 'GET',
             data: {},
-            setData: data => setData(data.data),
+            setData: data => {
+                setData(data.data);
+                setLoading(false);
+                // 先显示tab，然后延迟显示卡片
+                setTimeout(() => {
+                    setShowTabs(true);
+                    setTimeout(() => {
+                        setShowCards(true);
+                    }, 300);
+                }, 100);
+            },
             setSpin: setLoading,
         }).catch(e => {
             console.error('Failed to fetch score top data:', e);
@@ -101,9 +116,10 @@ const PublicScoreTop = () => {
                 },
             ];
             for (const game in data) {
+                const gameKey = game.replace(/-/g, '_');
                 newTabItems.push({
                     key: `${game}`,
-                    label: gLang(`game.${game}`) === `game.${game}` ? game : gLang(`game.${game}`),
+                    label: gLang(`game.${gameKey}`) === `game.${gameKey}` ? gameKey : gLang(`game.${gameKey}`),
                 });
             }
             setTabItems(newTabItems);
@@ -113,23 +129,27 @@ const PublicScoreTop = () => {
     const renderedCards = useMemo(() => {
         if (!data) return [];
         const cards = Object.entries(data)
-            .flatMap(([game, gameData]) =>
-                tab === 'all' || tab === game
+            .flatMap(([game, gameData]) => {
+                const gameKey = game.replace(/-/g, '_');
+                return tab === 'all' || tab === game
                     ? Object.entries(gameData).flatMap(([type, typeData]) =>
                           type.startsWith('PC-')
                               ? pc
                                   ? Object.entries(typeData).map(
-                                        ([deadlineType, deadlineTypeData]) => (
+                                        ([deadlineType, deadlineTypeData], index) => (
                                             <div
                                                 key={`${game}-${type}-${deadlineType}`}
+                                                className="score-top-card"
                                                 style={{
                                                     flex: '1 1 300px',
                                                     maxWidth: '500px',
                                                     minWidth: '300px',
+                                                    opacity: 0,
+                                                    animation: `fadeInUp 0.6s ease-out forwards ${index * 0.1}s`
                                                 }}
                                             >
                                                 <ScoreTopCard
-                                                    game={game}
+                                                    game={gameKey}
                                                     type={type.substring(3)}
                                                     deadlineType={deadlineType}
                                                     pc={true}
@@ -141,17 +161,20 @@ const PublicScoreTop = () => {
                                   : undefined
                               : !pc
                                 ? Object.entries(typeData).map(
-                                      ([deadlineType, deadlineTypeData]) => (
+                                      ([deadlineType, deadlineTypeData], index) => (
                                           <div
                                               key={`${game}-${type}-${deadlineType}`}
                                               style={{
                                                   flex: '1 1 300px',
                                                   maxWidth: '500px',
                                                   minWidth: '300px',
+                                                  opacity: 0,
+                                                  animation: `fadeInUp 0.6s ease-out forwards ${index * 0.1}s`
                                               }}
+                                              className="score-top-card"
                                           >
                                               <ScoreTopCard
-                                                  game={game}
+                                                  game={gameKey}
                                                   type={type}
                                                   deadlineType={deadlineType}
                                                   pc={false}
@@ -162,8 +185,8 @@ const PublicScoreTop = () => {
                                   )
                                 : undefined
                       )
-                    : undefined
-            )
+                    : undefined;
+            })
             .filter(e => e !== undefined);
 
         setEmpty(cards.length === 0);
@@ -171,7 +194,7 @@ const PublicScoreTop = () => {
     }, [data, tab, pc]);
 
     return (
-        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Space direction="vertical" size={16} style={{ width: '100%' }} className="score-top-page">
             {contextHolder}
             <Typography>
                 <Flex wrap="wrap" justify="space-between">
@@ -200,14 +223,35 @@ const PublicScoreTop = () => {
                         </div>
                     </Flex>
                     <div style={{ paddingTop: 4 }}>
-                        <Button icon={<ReloadOutlined />} loading={loading} onClick={onRefresh}>
+                        <Button icon={<ReloadOutlined />} loading={loading} onClick={onRefresh} className="refresh-button">
                             {gLang('scoreTop.refresh')}
                         </Button>
                     </div>
                 </Flex>
             </Typography>
 
-            {!error && (
+            {!data && loading && (
+                <div className="score-top-loading" style={{ padding: 40, textAlign: 'center' }}>
+                    <img
+                        src="/logo/EaseCation.png"
+                        alt=""
+                        className="easecation-logo-breathe"
+                        style={{
+                            display: 'block',
+                            margin: '0 auto 16px',
+                            width: 128,
+                            height: 'auto',
+                        }}
+                    />
+                    <Flex align="center" justify="center" gap="small">
+                        <Spin size="small" />
+                        <span style={{ color: mutedTextColor, fontSize: 15 }}>{gLang('loading')}</span>
+                    </Flex>
+                </div>
+            )}
+            {error && <ErrorDisplay onRetry={onRefresh} />}
+
+            {!error && showTabs && (
                 <Tabs
                     items={tabItems}
                     activeKey={tab}
@@ -215,6 +259,8 @@ const PublicScoreTop = () => {
                     tabBarStyle={{
                         color: mutedTextColor,
                         borderBottom: `1px solid ${tabBarBorder}`,
+                        opacity: 0,
+                        animation: 'fadeInUp 0.5s ease-out forwards'
                     }}
                     moreIcon={null}
                     style={{
@@ -223,22 +269,21 @@ const PublicScoreTop = () => {
                 />
             )}
 
-            {!data && loading && <Spin style={{ display: 'block', padding: 40 }} />}
-            {error && <ErrorDisplay onRetry={onRefresh} />}
-
-            {data && (
+            {data && showCards && (
                 <Flex wrap="wrap" gap="middle" justify="space-around">
                     {renderedCards}
                 </Flex>
             )}
 
-            {data && empty && (
+            {data && showCards && empty && (
                 <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                     description={gLang('scoreTop.empty')}
                     style={{
                         paddingTop: 40,
                         color: mutedTextColor,
+                        opacity: 0,
+                        animation: 'fadeInUp 0.5s ease-out forwards'
                     }}
                 />
             )}

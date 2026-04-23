@@ -67,12 +67,6 @@ const ThemeSettingsButton: React.FC<ThemeSettingsButtonProps> = ({
         }
         setOpen(false);
     };
-
-    const modalBackground = getThemeColor({
-        light: '#ffffff',
-        dark: '#141414',
-        custom: getCustomColor('surface'),
-    });
     const modalBorder = getThemeColor({
         light: '#f0f0f0',
         dark: '#303030',
@@ -174,11 +168,8 @@ const ThemeSettingsButton: React.FC<ThemeSettingsButtonProps> = ({
                 title={gLang('resources.theme.title')}
                 styles={{
                     header: {
-                        background: modalBackground,
                         color: modalTitleColor,
-                    },
-                    body: {
-                        background: modalBackground,
+                        borderBottom: `1px solid ${modalBorder}`,
                     },
                 }}
             >

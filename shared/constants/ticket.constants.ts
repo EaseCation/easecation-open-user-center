@@ -93,6 +93,7 @@ export const TICKET_STATUS_NAME_MAP: { [key in TicketStatus]: string } = {
 export const GAME_MODES = [
     // 大厅
     { key: 'lobby', name: '大厅' },
+    { key: 'homeland', name: '家园服' },
     // 竞技类游戏
     { key: 'stadium', name: '激情斗球' },
     { key: 'parkour', name: '跑酷天堂' },

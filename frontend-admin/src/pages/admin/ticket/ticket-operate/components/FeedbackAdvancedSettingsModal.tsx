@@ -21,6 +21,9 @@ const FeedbackAdvancedSettingsModal: React.FC<FeedbackAdvancedSettingsModalProps
     onSaved,
 }) => {
     const [loading, setLoading] = useState(false);
+    const [titleValue, setTitleValue] = useState('');
+    const [initialTitleValue, setInitialTitleValue] = useState('');
+    const [titleSaving, setTitleSaving] = useState(false);
     const [subsSaving, setSubsSaving] = useState(false);
     const [subscriptionsList, setSubscriptionsList] = useState<string[]>([]);
     const [newSubInput, setNewSubInput] = useState('');
@@ -52,6 +55,7 @@ const FeedbackAdvancedSettingsModal: React.FC<FeedbackAdvancedSettingsModalProps
             method: 'GET',
             data: { tid },
             setData: (data: {
+                title?: string;
                 type?: 'SUGGESTION' | 'BUG';
                 subscriptions?: string[];
                 publicTags?: FeedbackTagSummary[];
@@ -59,6 +63,9 @@ const FeedbackAdvancedSettingsModal: React.FC<FeedbackAdvancedSettingsModalProps
                 developerTags?: FeedbackTagSummary[];
                 progressTag?: FeedbackTagSummary | null;
             }) => {
+                const nextTitle = data?.title ?? '';
+                setTitleValue(nextTitle);
+                setInitialTitleValue(nextTitle);
                 setTypeValue(data?.type ?? 'SUGGESTION');
                 const list = data?.subscriptions ?? [];
                 setSubscriptionsList(list);
@@ -131,6 +138,35 @@ const FeedbackAdvancedSettingsModal: React.FC<FeedbackAdvancedSettingsModalProps
         [tid, onSaved]
     );
 
+    const saveTitle = useCallback(async () => {
+        const normalizedTitle = titleValue.trim();
+        if (!normalizedTitle) {
+            messageApi.error(gLang('feedback.titleRequired'));
+            return;
+        }
+        if (normalizedTitle.length > 100) {
+            messageApi.error(gLang('feedback.titleMaxLength'));
+            return;
+        }
+
+        setTitleSaving(true);
+        try {
+            await submitData({
+                url: '/feedback/title',
+                method: 'POST',
+                data: { tid, title: normalizedTitle },
+                successMessage: 'feedback.titleSaved',
+                setIsFormDisabled: () => {},
+                setIsModalOpen: () => {},
+            });
+            setTitleValue(normalizedTitle);
+            setInitialTitleValue(normalizedTitle);
+            onSaved?.();
+        } finally {
+            setTitleSaving(false);
+        }
+    }, [messageApi, onSaved, tid, titleValue]);
+
     useEffect(() => {
         loadSettings();
     }, [loadSettings]);
@@ -173,6 +209,10 @@ const FeedbackAdvancedSettingsModal: React.FC<FeedbackAdvancedSettingsModalProps
         });
     }, [modal, tid, onSaved, onClose]);
 
+    const normalizedTitle = titleValue.trim();
+    const titleChanged = normalizedTitle !== initialTitleValue.trim();
+    const isTitleInvalid = !normalizedTitle || normalizedTitle.length > 100;
+
     return (
         <>
             {contextHolder}
@@ -192,6 +232,35 @@ const FeedbackAdvancedSettingsModal: React.FC<FeedbackAdvancedSettingsModalProps
             >
                 <Spin spinning={loading}>
                     <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                        <Card size="small" style={{ boxShadow: 'none' }}>
+                            <Space direction="vertical" style={{ width: '100%' }} size="small">
+                                <Typography.Text strong>
+                                    {gLang('feedback.feedbackTitle')}
+                                </Typography.Text>
+                                <Input
+                                    value={titleValue}
+                                    onChange={event => setTitleValue(event.target.value)}
+                                    placeholder={gLang('feedback.titleIntro')}
+                                    maxLength={100}
+                                    showCount
+                                />
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        justifyContent: 'flex-end',
+                                    }}
+                                >
+                                    <Button
+                                        type="primary"
+                                        onClick={() => void saveTitle()}
+                                        loading={titleSaving}
+                                        disabled={!titleChanged || isTitleInvalid}
+                                    >
+                                        {gLang('common.save')}
+                                    </Button>
+                                </div>
+                            </Space>
+                        </Card>
                         <Card size="small" style={{ boxShadow: 'none' }}>
                             <Space direction="vertical" style={{ width: '100%' }} size="small">
                                 <div

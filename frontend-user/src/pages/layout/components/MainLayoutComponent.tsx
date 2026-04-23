@@ -3,7 +3,7 @@ import type { MenuProps } from 'antd';
 import { Content, Footer, Header } from 'antd/es/layout/layout';
 import { gLang } from '@common/language';
 import React from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import './MainLayoutComponent.css';
 import { useTheme } from '@common/contexts/ThemeContext';
 import ErrorBoundary from '../../../components/ErrorBoundary';
@@ -24,6 +24,7 @@ interface Props {
 
 const MainLayoutComponent = ({ breadcrumbItems, onLogout }: Props) => {
     const location = useLocation();
+    const navigate = useNavigate();
     const { user } = useAuth();
     const isLoginPage = location.pathname === '/login' || location.pathname.startsWith('/login/');
     const [themeModalOpen, setThemeModalOpen] = React.useState(false);
@@ -89,24 +90,47 @@ const MainLayoutComponent = ({ breadcrumbItems, onLogout }: Props) => {
     });
 
     // 设置菜单项
-    const settingsMenuItems: MenuProps['items'] = [
-        {
-            key: 'theme',
-            label: gLang('themeSettings'),
-            icon: <BgColorsOutlined />,
-            onClick: () => setThemeModalOpen(true),
-        },
-        {
-            type: 'divider',
-        },
-        {
-            key: 'logout',
-            label: gLang('dashboard.logout'),
-            icon: <LogoutOutlined />,
-            onClick: onLogout,
-            danger: true,
-        },
-    ];
+    const handleLogin = () => {
+        const currentUrl = window.location.href;
+        navigate('/login?return_to=' + encodeURIComponent(currentUrl));
+    };
+
+    const settingsMenuItems: MenuProps['items'] = user
+        ? [
+              {
+                  key: 'theme',
+                  label: gLang('themeSettings'),
+                  icon: <BgColorsOutlined />,
+                  onClick: () => setThemeModalOpen(true),
+              },
+              {
+                  type: 'divider',
+              },
+              {
+                  key: 'logout',
+                  label: gLang('dashboard.logout'),
+                  icon: <LogoutOutlined />,
+                  onClick: onLogout,
+                  danger: true,
+              },
+          ]
+        : [
+              {
+                  key: 'theme',
+                  label: gLang('themeSettings'),
+                  icon: <BgColorsOutlined />,
+                  onClick: () => setThemeModalOpen(true),
+              },
+              {
+                  type: 'divider',
+              },
+              {
+                  key: 'login',
+                  label: gLang('pageTitle./login'),
+                  icon: <UserOutlined />,
+                  onClick: handleLogin,
+              },
+          ];
 
     return (
         <>

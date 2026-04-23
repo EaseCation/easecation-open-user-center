@@ -17,9 +17,15 @@ import { IdcardOutlined, EyeOutlined, UpOutlined, DownOutlined } from '@ant-desi
 import { gLang } from '@common/language';
 import { getGlobalMessageApi } from '@common/utils/messageApiHolder';
 import { Ticket, TicketType } from '@ecuc/shared/types/ticket.types';
+import { UserBindMediaWithFullData, MediaStatus } from '@ecuc/shared/types/media.types';
 import MediaPanelComponent from '../../../media/media-list/components/MediaPanelComponent';
+import { getStatusNumber } from '../../../media/media-list/AdminMediaList';
 import { fetchData } from '@common/axiosConfig';
 import { ticketWithCreator } from '../../../../../config/ticketConfig';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+
+dayjs.extend(utc);
 
 interface MediaPanelCardProps {
     ticket: Ticket;
@@ -30,25 +36,23 @@ const MediaPanelCard: React.FC<MediaPanelCardProps> = ({ ticket, onRefresh }) =>
     const [collapsed, setCollapsed] = useState(false);
     const [previewMediaOpenid, setPreviewMediaOpenid] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
-    const [mediaStatus, setMediaStatus] = useState<string>('0');
-    const [actualMediaID, setActualMediaID] = useState<string>('');
+    const [mediaData, setMediaData] = useState<UserBindMediaWithFullData | null>(null);
     const [isEpointValid, setIsEpointValid] = useState<boolean>(true);
     const [form] = Form.useForm();
     const [messageApi, messageContextHolder] = message.useMessage();
 
+    const actualMediaID = mediaData?.id?.toString() || '';
+    const mediaStatus = mediaData?.status || '0';
     const titleText = `${gLang('mediaUser.id')}: ${actualMediaID || gLang('admin.mediaPanelNone')}`;
     const hasValidMediaID = !!actualMediaID;
 
     useEffect(() => {
         setIsLoading(true);
         fetchData({
-            url: '/media/getMediaInfoByOpenId',
+            url: '/media/detail',
             method: 'GET',
-            data: { openId: ticket.creator_openid },
-            setData: result => {
-                setMediaStatus(result.result.status);
-                setActualMediaID(result.result.id || '');
-            },
+            data: { mid: '', openid: ticket.creator_openid },
+            setData: setMediaData,
             setSpin: setIsLoading,
         }).finally(() => setIsLoading(false));
     }, [ticket.creator_openid]);
@@ -204,6 +208,46 @@ const MediaPanelCard: React.FC<MediaPanelCardProps> = ({ ticket, onRefresh }) =>
                 <Spin spinning={isLoading}>
                     {messageContextHolder}
                     <Space direction="vertical" style={{ width: '100%' }} size="small">
+                        {/* 创作者信息展示 */}
+                        <Space size={8} wrap>
+                            <Tag
+                                color={
+                                    mediaStatus === MediaStatus.ExcellentCreator
+                                        ? 'green'
+                                        : mediaStatus === MediaStatus.ActiveCreator
+                                          ? 'blue'
+                                          : mediaStatus === MediaStatus.ExpiredCreator
+                                            ? 'orange'
+                                            : mediaStatus === MediaStatus.Frozen
+                                              ? 'red'
+                                              : mediaStatus === MediaStatus.PendingReview
+                                                ? 'purple'
+                                                : 'default'
+                                }
+                            >
+                                {String(mediaStatus)}{' '}
+                                {gLang(
+                                    `mediaPanel.status.${getStatusNumber(String(mediaStatus))}`
+                                )}
+                            </Tag>
+                            <Tag color="gold">
+                                {gLang('mediaPanel.EBalance')}:{' '}
+                                {mediaData?.EBalance !== undefined ? mediaData.EBalance : '-'}
+                            </Tag>
+                            <Tag color="cyan">
+                                {gLang('mediaPanel.expire_date')}:{' '}
+                                {mediaData?.expireDate
+                                    ? dayjs.utc(mediaData.expireDate).local().format('YYYY-MM-DD')
+                                    : '-'}
+                            </Tag>
+                            <Tag color="default">
+                                {gLang('mediaPanel.lastReviewed')}:{' '}
+                                {mediaData?.lastReviewed
+                                    ? dayjs.utc(mediaData.lastReviewed).local().format('YYYY-MM-DD')
+                                    : '-'}
+                            </Tag>
+                        </Space>
+                        
                         <Space size={8} wrap>
                             <Button
                                 icon={<EyeOutlined />}

@@ -233,4 +233,8 @@ export const getTicketTypeGroups = (translate: (key: string) => string): TicketT
     },
 ];
 
+/** 与新建工单页卡片一致的可选类型（用于 /ticket/new 深度链接校验） */
+export const getTicketTypesOnNewTicketPage = (): TicketType[] =>
+    getTicketTypeGroups(() => '').flatMap(group => group.items.map(item => item.type));
+
 export default TicketTypeSelector;

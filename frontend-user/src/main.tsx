@@ -41,6 +41,7 @@ const DocumentCenter = lazy(() => import('./pages/document/DocumentCenter'));
 const Wiki = lazy(() => import('./pages/wiki/Wiki'));
 const Resources = lazy(() => import('./pages/resources/Resources'));
 const EmailVerificationPage = lazy(() => import('./pages/EmailVerificationPage'));
+const VerifyRegistrationCodePage = lazy(() => import('./pages/VerifyRegistrationCodePage'));
 const AnnualReport = lazy(() => import('./pages/annual-report/AnnualReport'));
 const AnnualReportShare = lazy(() => import('./pages/annual-report/AnnualReportShare'));
 const Lotteries = lazy(() => import('./pages/public/Lotteries'));
@@ -58,7 +59,43 @@ const Loading = () => (
     </div>
 );
 
-if (process.env.NODE_ENV !== 'development') {
+const PLAYGROUND_E2E_DISABLE_DEVTOOL_FLAG = 'playground-e2e-disable-devtool';
+
+const isPlaygroundUserOrigin = (): boolean => {
+    try {
+        return window.location.hostname === 'uc-playground.easecation.net';
+    } catch {
+        return false;
+    }
+};
+
+const isAutomatedBrowser = (): boolean => {
+    try {
+        return navigator.webdriver === true;
+    } catch {
+        return false;
+    }
+};
+
+const shouldEnableDisableDevTool = (): boolean => {
+    if (process.env.NODE_ENV === 'development') {
+        return false;
+    }
+
+    try {
+        // 仅对 playground 自动化测试放开 disable-devtool，避免普通环境误触发豁免。
+        const shouldBypassDisableDevTool =
+            isPlaygroundUserOrigin() &&
+            isAutomatedBrowser() &&
+            localStorage.getItem(PLAYGROUND_E2E_DISABLE_DEVTOOL_FLAG) === '1';
+
+        return !shouldBypassDisableDevTool;
+    } catch {
+        return true;
+    }
+};
+
+if (shouldEnableDisableDevTool()) {
     DisableDevTool({
         md5: '23070ac9c395db601f23278c63253063',
         disableMenu: false,
@@ -204,6 +241,10 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                                         <Route
                                             path="verify-email"
                                             element={<EmailVerificationPage />}
+                                        />
+                                        <Route
+                                            path="verify-registration-code"
+                                            element={<VerifyRegistrationCodePage />}
                                         />
                                         <Route path="*" element={<NotFound />} />
                                     </Route>

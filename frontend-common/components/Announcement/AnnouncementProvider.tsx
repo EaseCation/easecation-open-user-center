@@ -32,6 +32,9 @@ interface AnnouncementProviderProps {
     children: ReactNode;
 }
 
+const isOptionalAuthRoutePath = (pathname: string): boolean =>
+    pathname === '/feedback' || /^\/feedback\/\d+$/.test(pathname);
+
 export const AnnouncementProvider: React.FC<AnnouncementProviderProps> = ({ children }) => {
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [isAnnouncementModalVisible, setIsAnnouncementModalVisible] = useState(false);
@@ -41,6 +44,7 @@ export const AnnouncementProvider: React.FC<AnnouncementProviderProps> = ({ chil
 
     // 计算是否为公开路由
     const isPublicRoute = publicRoutes.some(route => matchPath({ path: route }, location.pathname));
+    const isOptionalAuthRoute = isOptionalAuthRoutePath(location.pathname);
 
     // 检查是否是带 token 的年度报告分享页
     const isAnnualReportShareWithToken =
@@ -75,15 +79,20 @@ export const AnnouncementProvider: React.FC<AnnouncementProviderProps> = ({ chil
     useEffect(() => {
         // 只在非公开路由时获取公告数据
         // 带 token 的分享页面不需要获取公告数据
-        if (!isPublicRoute && !isAnnualReportShareWithToken) {
+        if (!isPublicRoute && !isOptionalAuthRoute && !isAnnualReportShareWithToken) {
             refreshAnnouncements();
         }
-    }, [isPublicRoute, isAnnualReportShareWithToken]);
+    }, [isPublicRoute, isOptionalAuthRoute, isAnnualReportShareWithToken]);
 
     // 检查是否应该弹出公告
     useEffect(() => {
         // 带 token 的分享页面不显示公告
-        if (!isPublicRoute && !isAnnualReportShareWithToken && announcements.length > 0) {
+        if (
+            !isPublicRoute &&
+            !isOptionalAuthRoute &&
+            !isAnnualReportShareWithToken &&
+            announcements.length > 0
+        ) {
             const latestId = announcements.length > 0 ? announcements[0].id : null;
             const hasActiveAutoShow = hasActiveAutoShowAnnouncement(announcements);
             const shouldShow = shouldShowAnnouncement(latestId, hasActiveAutoShow);
@@ -94,7 +103,7 @@ export const AnnouncementProvider: React.FC<AnnouncementProviderProps> = ({ chil
                 updatePopupTime();
             }
         }
-    }, [isPublicRoute, isAnnualReportShareWithToken, announcements, popupSetting]);
+    }, [isPublicRoute, isOptionalAuthRoute, isAnnualReportShareWithToken, announcements, popupSetting]);
 
     // 处理模态框打开时更新弹出时间
     const handleModalOpen = (visible: boolean) => {

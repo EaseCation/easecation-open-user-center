@@ -78,7 +78,11 @@ const FeedbackListItem: React.FC<FeedbackListItemProps> = ({ ticket, to, showCom
                             <Text strong style={{ fontSize: 16, lineHeight: 1.5 }}>
                                 {title}
                             </Text>
-                            <FeedbackTagGroup publicTags={ticket.publicTags} />
+                            <FeedbackTagGroup
+                                publicTags={ticket.publicTags}
+                                progressTag={ticket.progressTag}
+                                showProgress
+                            />
                             {ticket.feedbackType === 'BUG' ? (
                                 <Tag color="red">{gLang('feedback.typeBug')}</Tag>
                             ) : ticket.feedbackType === 'SUGGESTION' ? (

@@ -86,3 +86,19 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover {
         transform: translateY(0);
     }
 }
+
+/* EaseCation 品牌 Logo 加载态呼吸缩放 */
+@keyframes easecationLogoBreathe {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.07);
+    }
+}
+
+.easecation-logo-breathe {
+    animation: easecationLogoBreathe 2.4s ease-in-out infinite;
+    transform-origin: center center;
+}

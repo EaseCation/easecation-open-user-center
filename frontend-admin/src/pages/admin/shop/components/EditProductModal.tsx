@@ -1,4 +1,7 @@
-import ProductFormModal, { ProductFormValues } from './ProductFormModal';
+import ProductFormModal, {
+    ProductFormValues,
+    type SpinRewardProductOption,
+} from './ProductFormModal';
 
 interface Product {
     id: string | number;
@@ -36,6 +39,8 @@ interface EditProductModalProps {
     readonly product: Product | null;
     readonly initialFormValues?: Partial<UpdateFormValues>;
     readonly onDelete?: () => void;
+    readonly onDrawLottery?: () => void;
+    readonly spinRewardProductOptions?: SpinRewardProductOption[];
 }
 
 export default function EditProductModal({
@@ -46,6 +51,8 @@ export default function EditProductModal({
     product,
     initialFormValues,
     onDelete: _onDelete,
+    onDrawLottery,
+    spinRewardProductOptions = [],
 }: EditProductModalProps) {
     return (
         <ProductFormModal
@@ -60,6 +67,8 @@ export default function EditProductModal({
                 product ? Number((product as any).id ?? (product as any).ID) : undefined
             }
             onDelete={_onDelete}
+            onDrawLottery={onDrawLottery}
+            spinRewardProductOptions={spinRewardProductOptions}
             previewCategory={(() => {
                 try {
                     const parsed = product?.json ? JSON.parse(product.json) : null;

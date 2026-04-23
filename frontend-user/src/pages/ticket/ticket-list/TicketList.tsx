@@ -1,7 +1,7 @@
 // 玩家侧工单列表页
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Space, Typography } from 'antd';
+import { Button, Space, Typography, message } from 'antd';
 import { fetchData } from '@common/axiosConfig';
 import { gLang } from '@common/language';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -45,6 +45,7 @@ const TicketList = () => {
     const [isLoadingTicketCount, setIsLoadingTicketCount] = useState(true);
     const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
     const [isSpinning, setIsSpinning] = useState(true); // 新增
+    const [messageApi, messageContextHolder] = message.useMessage();
 
     // Check if this is the first visit after login
     const isFirstVisitAfterLogin = useMemo(() => {
@@ -85,10 +86,28 @@ const TicketList = () => {
         }).then();
     }, []);
 
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        if (params.get('submitted') !== '1') {
+            return;
+        }
+        messageApi.success(gLang('ticketList.success'));
+        params.delete('submitted');
+        const nextSearch = params.toString();
+        navigate(
+            {
+                pathname: location.pathname,
+                search: nextSearch ? `?${nextSearch}` : '',
+            },
+            { replace: true }
+        );
+    }, [location.pathname, location.search, messageApi, navigate]);
+
     let cardIndex = 0;
 
     return (
         <Wrapper>
+            {messageContextHolder}
             {!isSpinning ? (
                 <>
                     <div

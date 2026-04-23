@@ -1,7 +1,7 @@
 //工单快捷操作的模态框组件
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Modal, Form, Input, InputNumber, Button, message, Select, Alert } from 'antd';
+import { Modal, Form, Input, InputNumber, Button, message, Select, Alert, Checkbox } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { gLang } from '@common/language';
 import { fetchData } from '@common/axiosConfig';
@@ -75,6 +75,8 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
         action === 'report' ||
         action === 'feedback' ||
         (action === 'punish' && punishType !== 'warn' && punishType !== 'overwatch' && punishType !== 'restrict_nick');
+    const canToggleDisplayToPlayer =
+        action === 'unban' || action === 'unmute' || action === 'transfer_to_hack';
 
     // When last24h >= 5 (第6个及以后), freeze confirm button for 3 seconds.
     useEffect(() => {
@@ -261,9 +263,12 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
                         : action === 'unban' || action === 'unmute'
                           ? {
                                 reason: values.reason,
+                                                                display_to_player: values.display_to_player,
                             }
                           : action === 'transfer_to_hack'
-                            ? {}
+                                                        ? {
+                                                                    display_to_player: values.display_to_player,
+                                                            }
                             : {
                                   value: values.value,
                               }),
@@ -373,6 +378,7 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
                         authorizer: authorizer || '',
                         reason: action === 'punish' ? gLang('admin.ticketFastActionKai') : '',
                         type: action === 'punish' ? 'hack' : '',
+                        display_to_player: true,
                         time: '',
                     }}
                 >
@@ -502,6 +508,12 @@ const FastActionModal: React.FC<FastActionModalProps> = ({
                                 maxLength={200}
                                 showCount
                             />
+                        </Form.Item>
+                    )}
+
+                    {canToggleDisplayToPlayer && (
+                        <Form.Item name="display_to_player" valuePropName="checked">
+                            <Checkbox>{gLang('ticketShortcut.displayToPlayer')}</Checkbox>
                         </Form.Item>
                     )}
                 </Form>

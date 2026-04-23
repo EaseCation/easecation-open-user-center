@@ -288,6 +288,8 @@ export type FeedbackListItemDto = {
     create_time: string;
     /** 面向玩家展示的公开标签 */
     publicTags: FeedbackTagSummary[];
+    /** 面向玩家展示的开发进度标签，null 表示"无" */
+    progressTag: FeedbackTagSummary | null;
     /** 建议/BUG，来自 feedback_meta.type */
     feedbackType: 'SUGGESTION' | 'BUG';
     /** 最近一条回复时间 */
@@ -622,3 +624,56 @@ export interface TicketEntrust {
     /** 创建时间 */
     create_time?: Date;
 }
+
+/**
+ * 反馈推荐状态
+ */
+export type RecommendationStatus =
+    | 'PENDING'
+    | 'VIEWED'
+    | 'ACCEPTED_PUBLISH'
+    | 'ACCEPTED_SUBSCRIBE_ONLY'
+    | 'DISMISSED'
+    | 'EXPIRED';
+
+/**
+ * 原工单推荐卡数据（用于工单详情页展示推荐反馈）
+ */
+export type RecommendationEntryFrom =
+    | 'ticket_auto_match'
+    | 'admin_manual_match'
+    | 'admin_create_feedback';
+
+export type FeedbackRecommendationCardDto = {
+    recommendationId: number;
+    sourceTid: number;
+    targetFeedbackTid: number;
+    matchScore: number;
+    matchReason: string | null;
+    status: RecommendationStatus;
+    entryFrom: RecommendationEntryFrom;
+    feedbackTitle: string;
+    feedbackStatus: TicketStatus;
+    feedbackType: string;
+    progressTag: FeedbackTagSummary | null;
+    publicTags: FeedbackTagSummary[];
+    replyCount: number;
+    lastReplyTime: string | null;
+    createdAt: string;
+    /** 自动关闭时间（ISO 日期），null 表示无倒计时 */
+    autoCloseAt: string | null;
+};
+
+/**
+ * 反馈帖来源工单操作卡数据（用于反馈详情页展示来源工单操作）
+ */
+export type SourceTicketActionCardDto = {
+    recommendationId: number;
+    sourceTid: number;
+    sourceTicketTitle: string;
+    draftContent: string;
+    draftAttachments: string[];
+    canPublish: boolean;
+    canSubscribeOnly: boolean;
+    matchScore: number;
+};

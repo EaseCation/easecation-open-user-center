@@ -10,8 +10,8 @@ interface SwitchDomainParams {
 }
 
 const LOCAL_PORT_MAP: Record<DomainType, number> = {
-    user: 9001,
-    admin: 9002,
+    user: 9101,
+    admin: 9102,
 };
 
 const isLocalHost = (hostname: string) => hostname === 'localhost' || hostname === '127.0.0.1';

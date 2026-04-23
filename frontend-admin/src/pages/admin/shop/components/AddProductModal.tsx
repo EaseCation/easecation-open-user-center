@@ -1,11 +1,12 @@
 import type { AddFormValues } from '../ShopAdmin';
-import ProductFormModal from './ProductFormModal';
+import ProductFormModal, { type SpinRewardProductOption } from './ProductFormModal';
 
 interface AddProductModalProps {
     readonly open: boolean;
     readonly onCancel: () => void;
     readonly onOk: (values: AddFormValues) => void;
     readonly confirmLoading: boolean;
+    readonly spinRewardProductOptions?: SpinRewardProductOption[];
 }
 
 export default function AddProductModal({
@@ -13,6 +14,7 @@ export default function AddProductModal({
     onCancel,
     onOk,
     confirmLoading,
+    spinRewardProductOptions = [],
 }: AddProductModalProps) {
     return (
         <ProductFormModal
@@ -22,6 +24,7 @@ export default function AddProductModal({
             confirmLoading={confirmLoading}
             mode={'add'}
             initialValues={{}}
+            spinRewardProductOptions={spinRewardProductOptions}
         />
     );
 }

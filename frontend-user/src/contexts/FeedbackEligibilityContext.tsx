@@ -4,6 +4,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { fetchData } from '@common/axiosConfig';
 import { gLang } from '@common/language';
+import { useAuth } from '@common/contexts/AuthContext';
 
 /** 发言资格检查结果（与后端 FeedbackEligibilityResult 类型对应） */
 export type FeedbackEligibilityResult =
@@ -34,12 +35,18 @@ const FeedbackEligibilityContext = createContext<FeedbackEligibilityContextType 
 export const FeedbackEligibilityProvider: React.FC<{ children: React.ReactNode }> = ({
     children,
 }) => {
+    const { user } = useAuth();
     const [eligibility, setEligibility] = useState<FeedbackEligibilityResult | null>(null);
     const [loading, setLoading] = useState(true);
     // 防止重复请求的 flag
     const fetchingRef = useRef(false);
 
     const fetchEligibility = useCallback(async () => {
+        if (!user?.openid) {
+            setEligibility(null);
+            setLoading(false);
+            return;
+        }
         if (fetchingRef.current) return;
         fetchingRef.current = true;
         setLoading(true);
@@ -56,7 +63,7 @@ export const FeedbackEligibilityProvider: React.FC<{ children: React.ReactNode }
             setLoading(false);
             fetchingRef.current = false;
         }
-    }, []);
+    }, [user?.openid]);
 
     useEffect(() => {
         fetchEligibility();

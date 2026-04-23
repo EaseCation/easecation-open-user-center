@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Modal, Table, Alert, Grid, Card, Typography, Space } from 'antd';
+import { Modal, Table, Alert, Grid, Card, Typography, Space, Tag } from 'antd';
 import { gLang } from '@common/language';
 import { fetchData } from '@common/axiosConfig';
 import {
@@ -15,10 +15,15 @@ const { Text, Title } = Typography;
 
 type PurchaseLog = {
     id: number;
+    item_id: number;
     ecid: string;
     item_title: string;
     quantity: number;
     total_price: number;
+    product_mode: string;
+    spin_reward_label?: string | null;
+    lottery_status?: 'pending' | 'drawn' | null;
+    lottery_result?: 'won' | 'lost' | null;
     created_at: string;
 };
 
@@ -77,6 +82,53 @@ export default function PurchaseLogsModal({ open, onClose, getTitleById, message
         });
     }, [list]);
 
+    const renderLotteryTags = (record: PurchaseLog) => {
+        if (record.product_mode !== 'lottery') {
+            if (record.product_mode === 'spin_lottery') {
+                return (
+                    <Space size={4} wrap>
+                        <Tag color="purple">{gLang('shop.spinLotteryTag')}</Tag>
+                        {record.spin_reward_label ? (
+                            <Tag color="gold">{record.spin_reward_label}</Tag>
+                        ) : null}
+                    </Space>
+                );
+            }
+            return null;
+        }
+
+        const tags = [];
+        if (record.lottery_status === 'pending') {
+            tags.push(
+                <Tag key="pending" color="processing">
+                    {gLang('shop.purchaseLogs.lotteryPending')}
+                </Tag>
+            );
+        }
+        if (record.lottery_status === 'drawn') {
+            tags.push(
+                <Tag key="drawn" color="default">
+                    {gLang('shop.purchaseLogs.lotteryDrawn')}
+                </Tag>
+            );
+        }
+        if (record.lottery_result === 'won') {
+            tags.push(
+                <Tag key="won" color="success">
+                    {gLang('shop.purchaseLogs.lotteryWon')}
+                </Tag>
+            );
+        }
+        if (record.lottery_result === 'lost') {
+            tags.push(
+                <Tag key="lost" color="error">
+                    {gLang('shop.purchaseLogs.lotteryLost')}
+                </Tag>
+            );
+        }
+        return tags.length > 0 ? <Space size={4} wrap>{tags}</Space> : null;
+    };
+
     // 移动端卡片渲染
     const renderMobileCard = (record: PurchaseLog) => (
         <Card
@@ -93,8 +145,9 @@ export default function PurchaseLogsModal({ open, onClose, getTitleById, message
                 {/* 商品名称 */}
                 <div>
                     <Title level={5} style={{ margin: 0, color: 'var(--ant-color-text)' }}>
-                        {record.item_title || getTitleById(0)}
+                        {record.item_title || getTitleById(record.item_id)}
                     </Title>
+                    <div style={{ marginTop: 8 }}>{renderLotteryTags(record)}</div>
                 </div>
 
                 {/* 购买信息行 */}
@@ -164,8 +217,20 @@ export default function PurchaseLogsModal({ open, onClose, getTitleById, message
             title: gLang('shop.purchaseLogs.columns.product'),
             dataIndex: 'item_title',
             key: 'item_title',
-            render: (v: string, _r: PurchaseLog) => v || getTitleById(0),
+            render: (v: string, r: PurchaseLog) => (
+                <Space direction="vertical" size={4}>
+                    <span>{v || getTitleById(r.item_id)}</span>
+                    {renderLotteryTags(r)}
+                </Space>
+            ),
             ellipsis: true,
+        },
+        {
+            title: gLang('shop.purchaseLogs.columns.status'),
+            dataIndex: 'lottery_status',
+            key: 'lottery_status',
+            render: (_v: string, r: PurchaseLog) => renderLotteryTags(r),
+            width: 180,
         },
         {
             title: gLang('shop.purchaseLogs.columns.quantity'),
